@@ -14,24 +14,24 @@ LINKEDIN_JOB_SEARCH_PARAMS: list[dict[str, str | bool]] = [
     {
         "keywords": "senior data scientist",
         "location": "San Antonio",
-        "f_TPR": "r604800",  # last 7 days
+        "f_TPR": "r86400",  # last 24 hours
         "remote": False,
         "parttime": False,  # full-time
     },
-    {
-        "keywords": "senior data scientist",
-        "location": "united states",
-        "f_TPR": "r604800",  # last 7 days
-        "remote": True,
-        "parttime": False,  # full-time
-    },
-    {
-        "keywords": "Machine Learning Engineer",
-        "location": "united states",
-        "f_TPR": "r604800",  # last 7 days
-        "remote": True,
-        "parttime": False,  # full-time
-    },
+    # {
+    #     "keywords": "senior data scientist",
+    #     "location": "united states",
+    #     "f_TPR": "r604800",  # last 7 days
+    #     "remote": True,
+    #     "parttime": False,  # full-time
+    # },
+    # {
+    #     "keywords": "Machine Learning Engineer",
+    #     "location": "united states",
+    #     "f_TPR": "r604800",  # last 7 days
+    #     "remote": True,
+    #     "parttime": False,  # full-time
+    # },
     # {
     #     "keywords": "senior data scientist",
     #     "location": "united states",
