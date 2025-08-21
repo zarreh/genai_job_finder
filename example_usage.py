@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from linkedin_parser import LinkedInJobParser, DatabaseManager
+from genai_job_finder.linkedin_parser import LinkedInJobParser, DatabaseManager
 from genai_job_finder.legacy.config import LINKEDIN_JOB_SEARCH_PARAMS
 
 
