@@ -5,6 +5,7 @@ A comprehensive job finder application that uses AI and web scraping technologie
 ## 🚀 Features
 
 - **LinkedIn Job Scraping**: Automated job collection from LinkedIn using requests and BeautifulSoup
+- **Web Frontend**: Streamlit-based user interface for easy job searching
 - **Database Storage**: SQLite database for storing job listings and tracking parsing runs
 - **Job Analysis**: Jupyter notebooks for analyzing collected job data
 - **AI Integration**: Ready for AI-powered job matching and analysis (using LangChain, OpenAI, Ollama)
@@ -40,6 +41,12 @@ poetry shell
 genai_job_finder/
 ├── genai_job_finder/           # Main package
 │   ├── __init__.py            # Package exports
+│   ├── frontend/              # Streamlit web frontend
+│   │   ├── __init__.py
+│   │   ├── app.py            # Main Streamlit application
+│   │   ├── config.py         # Frontend configuration
+│   │   ├── run.py            # Application launcher
+│   │   └── README.md         # Frontend documentation
 │   ├── linkedin_parser/       # LinkedIn job scraping module
 │   │   ├── __init__.py
 │   │   ├── models.py         # Job and JobRun data models
@@ -58,7 +65,28 @@ genai_job_finder/
 
 ## 🎯 Usage
 
-### Running the Job Parser
+### Web Frontend (Recommended)
+
+Launch the Streamlit web application for an easy-to-use interface:
+
+```bash
+# Option 1: Using the launch script
+./run_frontend.sh
+
+# Option 2: Using Poetry directly
+poetry run streamlit run genai_job_finder/frontend/app.py
+```
+
+The application will be available at `http://localhost:8501`
+
+**Features:**
+- Search jobs by title, keywords, and location
+- Filter by posting date (24h, week, month)
+- View results in paginated tables (15 jobs per page)
+- Download results as CSV files
+- Real-time search progress indicators
+
+### Command Line Usage
 
 Use the example script to collect job data:
 
