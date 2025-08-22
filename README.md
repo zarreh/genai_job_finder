@@ -9,7 +9,7 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 - **🌍 Location Intelligence**: Automatic location extraction and work type classification (Remote/Hybrid/On-site)
 - **🔧 Modular Architecture**: Clean, organized codebase with proper module structure
 - **⚡ Multiple Execution Methods**: Run as simple script, Python module, or programmatically
-- **🖥️ Web Frontend**: Streamlit-based user interface for interactive job searching
+- **🖥️ Enhanced Web Frontend**: Multi-tab Streamlit interface with live search, stored job browsing, and analytics
 - **💾 Database Storage**: SQLite database with automatic migration support
 - **📤 CSV Export**: Export job data with all 17 columns including location intelligence
 - **🛠️ Easy Execution**: Comprehensive Makefile for simplified command execution
@@ -78,11 +78,21 @@ make run-frontend
 
 **Available at:** `http://localhost:8501`
 
-**Features:**
-- 🔍 Interactive job search interface
-- 📊 Real-time results display
-- 📥 CSV download functionality
-- 🎛️ Customizable search parameters
+**Frontend Features:**
+- **🔍 Live Job Search Tab**: Interactive search with LinkedIn scraping
+  - Real-time job searching with custom parameters
+  - Location filtering and remote job options
+  - Results pagination and filtering
+- **📊 Stored Jobs Tab**: View jobs from database
+  - Display all jobs from previous parser runs
+  - Shows essential 11 columns: company, title, location, work_location_type, level, salary_range, employment_type, job_function, industries, posted_time, applicants
+  - **🖱️ Click-to-view details**: Click any row to see full job details with formatted content and LinkedIn link
+  - Advanced filtering by title, company, location, and work type
+  - CSV export functionality (summary columns only)
+- **📈 Search History Tab**: Parser run analytics
+  - View recent parser execution history
+  - Job count and timing statistics
+  - Run status and error tracking
 
 ## 🏗️ Project Structure
 
