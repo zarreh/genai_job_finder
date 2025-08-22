@@ -11,14 +11,16 @@ from bs4 import BeautifulSoup
 
 from .models import Job, JobType, ExperienceLevel
 from .database import DatabaseManager
+from ..legacy.utils import text_clean
 
 logger = logging.getLogger(__name__)
 
 
 class LinkedInJobParser:
-    """LinkedIn job parser using requests and BeautifulSoup"""
+    """LinkedIn job parser using requests and BeautifulSoup - matches legacy functionality"""
     
-    BASE_URL = "https://www.linkedin.com/jobs/search/"
+    BASE_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+    JOB_DETAILS_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{}"
     
     def __init__(self, database: Optional[DatabaseManager] = None):
         self.database = database or DatabaseManager()
@@ -28,36 +30,31 @@ class LinkedInJobParser:
     def _setup_session(self):
         """Setup requests session with proper headers"""
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0',
         }
         self.session.headers.update(headers)
     
-    def parse_jobs(self, search_query: str, location: str = "", max_pages: int = 5) -> List[Job]:
-        """Parse job listings from LinkedIn"""
+    def parse_jobs(self, search_query: str, location: str = "", total_jobs: int = 500, 
+                  time_filter: str = "r86400", remote: bool = False, parttime: bool = False) -> List[Job]:
+        """Parse job listings from LinkedIn - matches legacy functionality"""
         job_run = self.database.create_job_run(search_query, location)
         jobs = []
         
         try:
             logger.info(f"Starting job search: '{search_query}' in '{location}'")
             
-            for page in range(max_pages):
-                logger.info(f"Parsing page {page + 1}")
-                
-                page_jobs = self._parse_page(search_query, location, page, job_run.id)
-                jobs.extend(page_jobs)
-                
-                # Save batch to database
-                if page_jobs:
-                    self.database.save_jobs_batch(page_jobs)
-                
-                # Random delay between pages
-                time.sleep(random.uniform(2, 4))
+            # Step 1: Get job IDs (like legacy get_job_ids)
+            job_ids = self._get_job_ids(search_query, location, total_jobs, time_filter, remote, parttime)
+            logger.info(f"Found {len(job_ids)} unique job IDs")
+            
+            # Step 2: Get detailed job data for each ID (like legacy get_job_data)
+            jobs = self._get_job_data(job_ids, job_run.id)
             
             # Update run status
             self.database.update_job_run(job_run.id, "completed", len(jobs))
@@ -70,290 +67,287 @@ class LinkedInJobParser:
         
         return jobs
     
-    def _parse_page(self, search_query: str, location: str, page: int, run_id: int) -> List[Job]:
-        """Parse jobs from a single page"""
-        jobs = []
+    def _get_job_ids(self, search_query: str, location: str, total_jobs: int, 
+                    time_filter: str, remote: bool, parttime: bool) -> List[str]:
+        """Get job IDs from LinkedIn search results - matches legacy get_job_ids"""
+        import math
+        from tqdm import tqdm
         
-        try:
-            url = self._build_url(search_query, location, page)
-            logger.debug(f"Fetching: {url}")
-            
-            response = self.session.get(url, timeout=15)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            job_cards = self._find_job_cards(soup)
-            
-            logger.info(f"Found {len(job_cards)} job cards on page {page + 1}")
-            
-            for card in job_cards:
-                try:
-                    job = self._parse_job_card(card, run_id)
-                    if job:
-                        jobs.append(job)
-                except Exception as e:
-                    logger.warning(f"Error parsing job card: {e}")
-                    continue
-            
-        except requests.RequestException as e:
-            logger.error(f"Request failed for page {page + 1}: {e}")
-        except Exception as e:
-            logger.error(f"Error parsing page {page + 1}: {e}")
+        # Build URL like legacy linkedin_link_constructor
+        url = f"{self.BASE_URL}?keywords={search_query.replace(' ', '%20')}"
+        url += f"&location={location.replace(' ', '%20')}"
+        url += f"&f_TPR={time_filter}"
+        
+        if parttime:
+            url += "&f_JT=P"
+        if remote:
+            url += "&f_WT=2"
+        
+        url += "&start={}"
+        
+        job_ids = []
+        pages = math.ceil(total_jobs / 25)  # 25 jobs per page
+        
+        logger.info(f"Will fetch {pages} pages for up to {total_jobs} jobs")
+        logger.info(f"URL template: {url}")
+        
+        for i in tqdm(range(0, pages), desc="Getting job IDs"):
+            try:
+                page_url = url.format(i * 25)
+                logger.debug(f"Fetching page {i}: {page_url}")
+                
+                response = self.session.get(page_url, timeout=15)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, "html.parser")
+                jobs_on_page = soup.find_all("li")
+                
+                logger.debug(f"Page {i}: Found {len(jobs_on_page)} <li> elements")
+                
+                page_job_ids = []
+                for job in jobs_on_page:
+                    try:
+                        job_id = (
+                            job.find("div", {"class": "base-card"})
+                            .get("data-entity-urn")
+                            .split(":")[-1]
+                        )
+                        page_job_ids.append(job_id)
+                    except:
+                        continue
+                
+                logger.info(f"Page {i}: Extracted {len(page_job_ids)} job IDs")
+                job_ids.extend(page_job_ids)
+                
+                time.sleep(random.uniform(1, 3))
+                
+            except Exception as e:
+                logger.warning(f"Error fetching page {i}: {e}")
+                continue
+        
+        unique_job_ids = list(set(job_ids))  # Remove duplicates
+        logger.info(f"Total unique job IDs found: {len(unique_job_ids)}")
+        return unique_job_ids
+    
+    def _get_job_data(self, job_ids: List[str], run_id: int) -> List[Job]:
+        """Get detailed job data for each job ID - matches legacy get_job_data"""
+        from tqdm import tqdm
+        
+        jobs = []
+        date = datetime.now().date().isoformat()
+        
+        for job_id in tqdm(job_ids, desc="Getting job details"):
+            try:
+                job_details_url = self.JOB_DETAILS_URL.format(job_id)
+                response = self.session.get(job_details_url, timeout=15)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, "html.parser")
+                
+                job_info = self._extract_job_details(soup, job_id, date, job_details_url, run_id)
+                if job_info:
+                    jobs.append(job_info)
+                    # Save individual job to database
+                    self.database.save_job(job_info)
+                
+                time.sleep(random.uniform(1, 3))
+                
+            except Exception as e:
+                logger.warning(f"Error fetching job {job_id}: {e}")
+                continue
         
         return jobs
     
-    def _build_url(self, search_query: str, location: str, page: int) -> str:
-        """Build LinkedIn search URL"""
-        url = f"{self.BASE_URL}?keywords={quote(search_query)}"
-        
-        if location:
-            url += f"&location={quote(location)}"
-        
-        if page > 0:
-            url += f"&start={page * 25}"  # LinkedIn shows 25 jobs per page
-        
-        # Add time filter for recent jobs (last 7 days)
-        url += "&f_TPR=r604800"
-        
-        return url
-    
-    def _find_job_cards(self, soup: BeautifulSoup) -> List:
-        """Find job cards using various selectors"""
-        selectors = [
-            'div.job-search-card',
-            'div.base-card',
-            'div.result-card',
-            'article.job-card',
-            'div[data-job-id]'
-        ]
-        
-        for selector in selectors:
-            cards = soup.select(selector)
-            if cards:
-                return cards
-        
-        return []
-    
-    def _parse_job_card(self, card, run_id: int) -> Optional[Job]:
-        """Parse individual job card"""
+    def _extract_job_details(self, soup: BeautifulSoup, job_id: str, date: str, 
+                           parsing_link: str, run_id: int) -> Optional[Job]:
+        """Extract detailed job information from job page - matches legacy extraction"""
         try:
-            # Extract job ID
-            job_id = self._extract_job_id(card)
+            job_info = {}
             
-            # Extract basic information
-            title = self._extract_title(card)
-            company = self._extract_company(card)
-            location = self._extract_location(card)
+            # Company name
+            try:
+                job_info["company"] = (
+                    soup.find("div", {"class": "top-card-layout__card"})
+                    .find("a")
+                    .find("img")
+                    .get("alt")
+                )
+            except:
+                job_info["company"] = "Unknown Company"
             
-            # Extract additional information
-            job_url = self._extract_job_url(card)
-            posted_date = self._extract_posted_date(card)
-            description = self._extract_description(card)
-            easy_apply = self._check_easy_apply(card)
+            # Job title
+            try:
+                job_info["title"] = (
+                    soup.find("div", {"class": "top-card-layout__entity-info"})
+                    .find("a")
+                    .text.strip()
+                )
+            except:
+                job_info["title"] = "Unknown Title"
             
-            # Create job object
+            # Location extraction
+            try:
+                # Look for location in the top card area
+                location_elem = soup.find("span", {"class": "topcard__flavor topcard__flavor--bullet"})
+                if location_elem:
+                    job_info["location"] = location_elem.text.strip()
+                else:
+                    # Alternative location selectors
+                    location_selectors = [
+                        ".topcard__flavor",
+                        ".sub-nav-cta__meta-text",
+                        "[class*='location']"
+                    ]
+                    for selector in location_selectors:
+                        elem = soup.select_one(selector)
+                        if elem:
+                            job_info["location"] = elem.text.strip()
+                            break
+                    else:
+                        job_info["location"] = "Location not specified"
+            except:
+                job_info["location"] = "Location not specified"
+            
+            # Work location type (Remote/Hybrid/On-site) detection
+            job_info["work_location_type"] = self._determine_work_location_type(soup, job_info.get("location", ""))
+            
+            # Job criteria (level, employment_type, job_function, industries)
+            try:
+                criteria_list = soup.find(
+                    "ul", {"class": "description__job-criteria-list"}
+                ).find_all("li")
+                
+                field_names = ["level", "employment_type", "job_function", "industries"]
+                field_labels = [
+                    "Seniority level",
+                    "Employment type", 
+                    "Job function",
+                    "Industries",
+                ]
+                
+                for i, field in enumerate(field_names):
+                    if i < len(criteria_list):
+                        job_info[field] = (
+                            criteria_list[i].text.replace(field_labels[i], "").strip()
+                        )
+                    else:
+                        job_info[field] = ""
+            except:
+                job_info["level"] = ""
+                job_info["employment_type"] = ""
+                job_info["job_function"] = ""
+                job_info["industries"] = ""
+            
+            # Job description/content
+            try:
+                desc_elem = soup.find(
+                    "div", {"class": "description__text description__text--rich"}
+                )
+                job_info["content"] = text_clean(
+                    desc_elem.text.strip() if desc_elem else ""
+                )
+            except:
+                job_info["content"] = ""
+            
+            # Posted time
+            try:
+                posted_time_elem = soup.find("span", {"class": "posted-time-ago__text"})
+                job_info["posted_time"] = (
+                    posted_time_elem.text.strip() if posted_time_elem else "N/A"
+                )
+            except:
+                job_info["posted_time"] = "N/A"
+            
+            # Salary range
+            try:
+                salary_div = soup.find("div", class_="compensation__salary-range")
+                if salary_div:
+                    salary = salary_div.find("div", class_="salary compensation__salary")
+                    if salary:
+                        job_info["salary_range"] = salary.get_text(strip=True)
+                    else:
+                        job_info["salary_range"] = None
+                else:
+                    job_info["salary_range"] = None
+            except:
+                job_info["salary_range"] = None
+            
+            # Number of applicants
+            try:
+                applicants_elem = soup.find("span", {"class": "num-applicants__caption"})
+                job_info["applicants"] = (
+                    applicants_elem.text.strip() if applicants_elem else "N/A"
+                )
+            except:
+                job_info["applicants"] = "N/A"
+            
+            # Job posting link
+            try:
+                link_elem = soup.find("a", {"class": "topcard__link"})
+                job_info["job_posting_link"] = link_elem.get("href") if link_elem else "N/A"
+            except:
+                job_info["job_posting_link"] = "N/A"
+            
+            # Create Job object
             job = Job(
                 job_id=job_id,
-                title=title,
-                company=company,
-                location=location,
-                description=description,
-                posted_date=posted_date,
-                easy_apply=easy_apply,
-                linkedin_url=job_url,
+                company=job_info["company"],
+                title=job_info["title"],
+                location=job_info["location"],
+                work_location_type=job_info["work_location_type"],
+                level=job_info["level"],
+                salary_range=job_info["salary_range"],
+                content=job_info["content"],
+                employment_type=job_info["employment_type"],
+                job_function=job_info["job_function"],
+                industries=job_info["industries"],
+                posted_time=job_info["posted_time"],
+                applicants=job_info["applicants"],
+                date=date,
+                parsing_link=parsing_link,
+                job_posting_link=job_info["job_posting_link"],
                 run_id=run_id
             )
-            
-            # Extract additional details from text
-            self._enhance_job_details(job)
             
             return job
             
         except Exception as e:
-            logger.error(f"Error parsing job card: {e}")
+            logger.error(f"Error extracting job details: {e}")
             return None
     
-    def _extract_job_id(self, card) -> str:
-        """Extract job ID from card"""
-        job_id = (
-            card.get('data-job-id') or
-            card.get('data-entity-urn', '').split(':')[-1] or
-            str(abs(hash(str(card)[:100])))  # Fallback hash
-        )
-        return job_id
-    
-    def _extract_title(self, card) -> str:
-        """Extract job title"""
-        selectors = [
-            'h3.base-search-card__title',
-            'h3',
-            'a.base-card__full-link',
-            '.job-card-title'
+    def _determine_work_location_type(self, soup: BeautifulSoup, location: str) -> str:
+        """Determine if job is Remote, Hybrid, or On-site"""
+        # Check the full page content for remote/hybrid indicators
+        page_text = soup.get_text().lower()
+        location_lower = location.lower()
+        
+        # Remote indicators
+        remote_keywords = [
+            'remote', 'work from home', 'wfh', 'telecommute', 'distributed',
+            'anywhere', 'location independent', 'fully remote'
         ]
         
-        for selector in selectors:
-            elem = card.select_one(selector)
-            if elem:
-                return elem.get_text(strip=True)
-        
-        return "Unknown Title"
-    
-    def _extract_company(self, card) -> str:
-        """Extract company name"""
-        selectors = [
-            'h4.base-search-card__subtitle',
-            'a[data-tracking-control-name*="job-search-card-subtitle"]',
-            '.job-search-card__subtitle-text',
-            'h4'
+        # Hybrid indicators
+        hybrid_keywords = [
+            'hybrid', 'flexible', 'mix of remote', 'partially remote',
+            'some remote', 'remote friendly', 'flexible location'
         ]
         
-        for selector in selectors:
-            elem = card.select_one(selector)
-            if elem:
-                return elem.get_text(strip=True)
+        # Check location field first
+        for keyword in remote_keywords:
+            if keyword in location_lower:
+                return "Remote"
         
-        return "Unknown Company"
-    
-    def _extract_location(self, card) -> str:
-        """Extract job location"""
-        selectors = [
-            '.job-search-card__location',
-            '.base-search-card__metadata',
-            '[class*="location"]'
-        ]
+        for keyword in hybrid_keywords:
+            if keyword in location_lower:
+                return "Hybrid"
         
-        for selector in selectors:
-            elem = card.select_one(selector)
-            if elem:
-                text = elem.get_text(strip=True)
-                if text and (',' in text or len(text) > 3):  # Basic location format check
-                    return text
+        # Check full page content
+        for keyword in remote_keywords:
+            if keyword in page_text:
+                return "Remote"
         
-        return "Unknown Location"
-    
-    def _extract_job_url(self, card) -> str:
-        """Extract job URL"""
-        selectors = [
-            'a.base-card__full-link',
-            'a[href*="/jobs/view/"]',
-            'a[href]'
-        ]
+        for keyword in hybrid_keywords:
+            if keyword in page_text:
+                return "Hybrid"
         
-        for selector in selectors:
-            elem = card.select_one(selector)
-            if elem and elem.get('href'):
-                url = elem['href']
-                if not url.startswith('http'):
-                    url = urljoin(self.BASE_URL, url)
-                return url
-        
-        return ""
-    
-    def _extract_posted_date(self, card) -> Optional[datetime]:
-        """Extract when job was posted"""
-        try:
-            # Look for time element
-            time_elem = card.select_one('time')
-            if time_elem:
-                time_text = time_elem.get('datetime') or time_elem.get_text()
-            else:
-                # Look for text patterns in card
-                card_text = card.get_text().lower()
-                patterns = [
-                    r'(\d+)\s*(hour|hr)s?\s*ago',
-                    r'(\d+)\s*(day|d)s?\s*ago',
-                    r'(\d+)\s*(week|w)s?\s*ago',
-                    r'(\d+)\s*(month|mo)s?\s*ago'
-                ]
-                
-                for pattern in patterns:
-                    match = re.search(pattern, card_text)
-                    if match:
-                        time_text = match.group(0)
-                        break
-                else:
-                    return None
-            
-            # Parse relative time
-            return self._parse_relative_time(time_text.lower())
-            
-        except Exception:
-            return None
-    
-    def _parse_relative_time(self, time_text: str) -> Optional[datetime]:
-        """Parse relative time text to datetime"""
-        try:
-            if 'hour' in time_text or 'hr' in time_text:
-                hours = int(re.search(r'(\d+)', time_text).group(1))
-                return datetime.now() - timedelta(hours=hours)
-            elif 'day' in time_text:
-                days = int(re.search(r'(\d+)', time_text).group(1))
-                return datetime.now() - timedelta(days=days)
-            elif 'week' in time_text:
-                weeks = int(re.search(r'(\d+)', time_text).group(1))
-                return datetime.now() - timedelta(weeks=weeks)
-            elif 'month' in time_text:
-                months = int(re.search(r'(\d+)', time_text).group(1))
-                return datetime.now() - timedelta(days=months*30)
-        except:
-            pass
-        
-        return None
-    
-    def _extract_description(self, card) -> str:
-        """Extract job description snippet"""
-        selectors = [
-            '.job-search-card__snippet',
-            '.base-search-card__snippet',
-            'p'
-        ]
-        
-        for selector in selectors:
-            elem = card.select_one(selector)
-            if elem:
-                return elem.get_text(strip=True)
-        
-        return ""
-    
-    def _check_easy_apply(self, card) -> bool:
-        """Check if job has Easy Apply option"""
-        return bool(card.find(string=re.compile(r'Easy Apply', re.IGNORECASE)))
-    
-    def _enhance_job_details(self, job: Job):
-        """Extract additional details from job text"""
-        text = f"{job.title} {job.description}".lower()
-        
-        # Extract salary
-        salary_patterns = [
-            r'\$[\d,]+\s*-\s*\$[\d,]+',
-            r'\$[\d,]+k?\s*-\s*\$[\d,]+k?',
-            r'[\d,]+\s*-\s*[\d,]+\s*(usd|dollar)'
-        ]
-        
-        for pattern in salary_patterns:
-            match = re.search(pattern, text)
-            if match:
-                job.salary_range = match.group(0)
-                break
-        
-        # Detect job type
-        if any(term in text for term in ['full-time', 'full time', 'fulltime']):
-            job.job_type = JobType.FULL_TIME
-        elif any(term in text for term in ['part-time', 'part time', 'parttime']):
-            job.job_type = JobType.PART_TIME
-        elif 'contract' in text:
-            job.job_type = JobType.CONTRACT
-        elif 'intern' in text:
-            job.job_type = JobType.INTERNSHIP
-        
-        # Detect experience level
-        if any(term in text for term in ['senior', 'sr.', 'lead', 'principal']):
-            job.experience_level = ExperienceLevel.SENIOR
-        elif any(term in text for term in ['junior', 'jr.', 'entry level', 'entry-level']):
-            job.experience_level = ExperienceLevel.ENTRY
-        elif any(term in text for term in ['director', 'head of']):
-            job.experience_level = ExperienceLevel.DIRECTOR
-        
-        # Check for remote work
-        if any(term in text for term in ['remote', 'work from home', 'wfh']):
-            job.remote_option = True
+        # Default to On-site if no remote/hybrid indicators found
+        return "On-site"

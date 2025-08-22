@@ -4,7 +4,7 @@ import sys
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import math
 
 # Add the parent directory to the path so we can import from genai_job_finder
@@ -37,12 +37,20 @@ st.set_page_config(
 # Initialize session state
 if 'jobs' not in st.session_state:
     st.session_state.jobs = []
+if 'stored_jobs' not in st.session_state:
+    st.session_state.stored_jobs = []
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 1
 if 'search_performed' not in st.session_state:
     st.session_state.search_performed = False
 if 'rows_per_page' not in st.session_state:
     st.session_state.rows_per_page = 10
+if 'jobs_loaded' not in st.session_state:
+    st.session_state.jobs_loaded = False
+if 'selected_job' not in st.session_state:
+    st.session_state.selected_job = None
+if 'show_job_details' not in st.session_state:
+    st.session_state.show_job_details = False
 
 def get_time_filter_options():
     """Get time filter options for job posting dates"""
@@ -53,23 +61,281 @@ def get_time_filter_options():
         "Past month": 30
     }
 
-def format_job_for_display(job: Job) -> dict:
-    """Format job data for display in table"""
-    return {
-        "Title": job.title,
-        "Company": job.company,
-        "Location": job.location,
-        "Posted": job.posted_date.strftime("%Y-%m-%d %H:%M") if job.posted_date else "N/A",
-        "Job Type": job.job_type.value if job.job_type else "N/A",
-        "Experience": job.experience_level.value if job.experience_level else "N/A",
-        "Remote": "✅ Yes" if job.remote_option else "❌ No",
-        "Easy Apply": "✅ Yes" if job.easy_apply else "❌ No",
-        "Applicants": job.applicants_count if job.applicants_count else "N/A",
-        "LinkedIn URL": job.linkedin_url if job.linkedin_url else "N/A"
-    }
+def load_jobs_from_database() -> List[dict]:
+    """Load all jobs from the database"""
+    try:
+        # Use the main database in data/ folder
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "jobs.db")
+        
+        if not os.path.exists(db_path):
+            logger.warning(f"Database not found at {db_path}")
+            return []
+        
+        db_manager = DatabaseManager(db_path)
+        df = db_manager.get_all_jobs_as_dataframe()
+        
+        if df.empty:
+            return []
+        
+        # Convert DataFrame to list of dictionaries
+        jobs = df.to_dict('records')
+        logger.info(f"Loaded {len(jobs)} jobs from database")
+        return jobs
+        
+    except Exception as e:
+        logger.error(f"Error loading jobs from database: {e}")
+        return []
+
+def get_recent_runs_from_database() -> List[dict]:
+    """Get recent job runs from database"""
+    try:
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "jobs.db")
+        
+        if not os.path.exists(db_path):
+            return []
+        
+        db_manager = DatabaseManager(db_path)
+        runs = db_manager.get_recent_runs()
+        return runs
+        
+    except Exception as e:
+        logger.error(f"Error loading runs from database: {e}")
+        return []
+
+def display_job_details(job_data: dict):
+    """Display detailed view of a selected job"""
+    st.header("📋 Job Details")
+    
+    # Back button
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("← Back to Jobs", type="primary"):
+            st.session_state.show_job_details = False
+            st.session_state.selected_job = None
+            st.rerun()
+    
+    # Job header
+    st.subheader(f"🎯 {job_data.get('title', 'N/A')}")
+    st.markdown(f"**🏢 Company:** {job_data.get('company', 'N/A')}")
+    
+    # Key information in columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("📍 Location", job_data.get('location', 'N/A'))
+        st.metric("💼 Employment Type", job_data.get('employment_type', 'N/A'))
+        st.metric("📊 Level", job_data.get('level', 'N/A'))
+    
+    with col2:
+        st.metric("🏠 Work Location Type", job_data.get('work_location_type', 'N/A'))
+        st.metric("💰 Salary Range", job_data.get('salary_range', 'N/A') if job_data.get('salary_range') else 'Not specified')
+        st.metric("⏰ Posted", job_data.get('posted_time', 'N/A'))
+    
+    with col3:
+        st.metric("👥 Applicants", job_data.get('applicants', 'N/A'))
+        st.metric("🔧 Job Function", job_data.get('job_function', 'N/A'))
+        st.metric("🏭 Industries", job_data.get('industries', 'N/A'))
+    
+    # LinkedIn link
+    if job_data.get('job_posting_link'):
+        st.markdown(f"🔗 **[View on LinkedIn]({job_data.get('job_posting_link')})**")
+    
+    # Date parsed
+    if job_data.get('date'):
+        st.caption(f"📅 Parsed on: {job_data.get('date')}")
+    
+    st.divider()
+    
+    # Job description
+    st.subheader("📝 Job Description")
+    content = job_data.get('content', 'No job description available.')
+    
+    if content and content != 'N/A':
+        # Use the enhanced content formatter
+        render_formatted_content(content)
+    else:
+        st.info("No detailed job description available.")
+    
+    # Additional metadata
+    st.divider()
+    st.subheader("🔍 Additional Information")
+    
+    detail_cols = st.columns(2)
+    with detail_cols[0]:
+        if job_data.get('job_id'):
+            st.text(f"Job ID: {job_data.get('job_id')}")
+        if job_data.get('id'):
+            st.text(f"Record ID: {job_data.get('id')}")
+    
+    with detail_cols[1]:
+        if job_data.get('parsing_link'):
+            st.markdown(f"**Parsing Source:** [LinkedIn API]({job_data.get('parsing_link')})")
+        if job_data.get('run_id'):
+            st.text(f"Parser Run ID: {job_data.get('run_id')}")
+
+def find_job_by_id(job_id: str, jobs_data: List[dict]) -> Optional[dict]:
+    """Find a job by its ID in the jobs data"""
+    for job in jobs_data:
+        if isinstance(job, dict):
+            if job.get('id') == job_id:
+                return job
+        else:
+            if hasattr(job, 'id') and job.id == job_id:
+                return job.to_dict() if hasattr(job, 'to_dict') else job.__dict__
+    return None
+
+def format_job_content(content: str) -> str:
+    """Format job content to match original LinkedIn structure as closely as possible"""
+    if not content or content == 'N/A':
+        return "No detailed job description available."
+    
+    import re
+    
+    # Clean up common issues
+    formatted = content.replace('\\n', '\n').replace('\\t', '\t')
+    
+    # Remove excessive "Show more Show less" patterns
+    formatted = re.sub(r'\s*Show more Show less\s*', '', formatted)
+    formatted = re.sub(r'\s*Show more\s*$', '', formatted)
+    formatted = re.sub(r'\s*Show less\s*$', '', formatted)
+    
+    # Step 1: Identify and separate major sections
+    # Break content at common LinkedIn section headers
+    section_headers = [
+        r'(What We Can Offer You)',
+        r'(About the [Jj]ob)',
+        r'(Position Responsibilities)',
+        r'(Job Responsibilities)', 
+        r'(Key Responsibilities)',
+        r'(Responsibilities)',
+        r'(Requirements)',
+        r'(Qualifications)',
+        r'(Experience Required)',
+        r'(Skills Required)',
+        r'(What We Offer)',
+        r'(Benefits)',
+        r'(About [A-Za-z\s&,]+)',
+        r'(Company Information)',
+    ]
+    
+    # Add breaks before major sections
+    for header_pattern in section_headers:
+        formatted = re.sub(f'({header_pattern})([A-Z])', r'\n\n## \1\n\n\2', formatted, flags=re.IGNORECASE)
+    
+    # Step 2: Identify subsection headers (usually end with colon)
+    subsection_patterns = [
+        r'(Marketing Activities:)',
+        r'(Sales Activities:)',
+        r'(Administrative Activities:)',
+        r'(Customer Service:)',
+        r'(Training:)',
+        r'([A-Z][A-Za-z\s]+ Activities:)',
+        r'([A-Z][A-Za-z\s]+ Duties:)',
+        r'([A-Z][A-Za-z\s]+ Requirements:)',
+    ]
+    
+    for pattern in subsection_patterns:
+        formatted = re.sub(f'({pattern})([A-Z])', r'\n\n### \1\n\n\2', formatted, flags=re.IGNORECASE)
+    
+    # Step 3: Create bullet points from run-together benefit lists
+    # Look for patterns like "ItemNameDescriptionNextItem"
+    benefit_patterns = [
+        r'([A-Z][a-zA-Z\s]+ -- [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',  # "Career Growth -- desc" followed by next item
+        r'([A-Z][a-zA-Z\s]+ - [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',   # "Career Growth - desc" followed by next item
+        r'(Paid [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',              # "Paid Time Off" followed by next item
+        r'(Health[^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',                      # "Health, Dental, Vision..." followed by next item
+        r'(Employee [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',          # "Employee Assistance Program" followed by next item
+        r'(Tuition [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',           # "Tuition Assistance Program" followed by next item
+        r'(Financial [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',         # "Financial Coaching..." followed by next item
+        r'(Floating [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',          # "Floating Cultural Holiday" followed by next item
+        r'(Family [A-Z][a-zA-Z\s]*?\([^)]+\))([A-Z][a-zA-Z]+ [a-z])',   # "Family Focused Benefits (...)" followed by next item
+        r'(Retirement [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',        # "Retirement Plan" followed by next item
+        r'(Incentive [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',            # "Incentive program..." followed by next item
+    ]
+    
+    for pattern in benefit_patterns:
+        formatted = re.sub(pattern, r'• \1\n• \2', formatted)
+    
+    # Step 4: Handle action verbs that should be bullet points
+    action_patterns = [
+        r'(Execute the [a-z][^A-Z.]*?\.)',    # "Execute the proactive marketing..."
+        r'(Complete [a-z][^A-Z.]*?\.)',       # "Complete assigned daily..."
+        r'(Provide [a-z][^A-Z.]*?\.)',        # "Provide effective customer..."
+        r'(Act as [a-z][^A-Z.]*?\.)',         # "Act as a digital ambassador..."
+        r'(Initiate [a-z][^A-Z.]*?\.)',       # "Initiate quality financial..."
+        r'(Support [a-z][^A-Z.]*?\.)',        # "Support consumer portfolio..."
+        r'(Assist [a-z][^A-Z.]*?\.)',         # "Assist in community awareness..."
+        r'(Maintain [a-z][^A-Z.]*?\.)',       # "Maintain customer confidence..."
+        r'(Ensure [a-z][^A-Z.]*?\.)',         # "Ensure compliance..."
+    ]
+    
+    for pattern in action_patterns:
+        formatted = re.sub(pattern, r'\n• \1\n', formatted, flags=re.IGNORECASE)
+    
+    # Step 5: Break very long paragraphs at sentence boundaries
+    formatted = re.sub(r'\.([A-Z][a-z]{3,})', r'.\n\n\1', formatted)
+    
+    # Step 6: Clean up formatting
+    # Remove extra whitespace and normalize line breaks
+    formatted = re.sub(r'\n\s*\n\s*\n+', '\n\n', formatted)
+    formatted = re.sub(r'^\s+', '', formatted, flags=re.MULTILINE)
+    
+    # Fix bullet point spacing
+    formatted = re.sub(r'\n•', '\n• ', formatted)
+    formatted = re.sub(r'• +', '• ', formatted)
+    
+    # Clean up headers
+    formatted = re.sub(r'##\s+', '## ', formatted)
+    formatted = re.sub(r'###\s+', '### ', formatted)
+    
+    return formatted.strip()
+
+def render_formatted_content(content: str) -> None:
+    """Render formatted job content using Streamlit components"""
+    formatted_content = format_job_content(content)
+    
+    # Simple approach: just use st.markdown with the formatted content
+    # This should definitely work and show the formatting
+    st.markdown(formatted_content)
+
+def format_job_for_display(job_data: dict) -> dict:
+    """Format job data for display in table - supports both Job objects and dict data"""
+    # Handle both Job objects and dictionary data
+    if isinstance(job_data, dict):
+        # Data from database (dictionary format)
+        return {
+            "Company": job_data.get("company", "N/A"),
+            "Title": job_data.get("title", "N/A"),
+            "Location": job_data.get("location", "N/A"),
+            "Work Location Type": job_data.get("work_location_type", "N/A"),
+            "Level": job_data.get("level", "N/A"),
+            "Salary Range": job_data.get("salary_range", "N/A"),
+            "Employment Type": job_data.get("employment_type", "N/A"),
+            "Job Function": job_data.get("job_function", "N/A"),
+            "Industries": job_data.get("industries", "N/A"),
+            "Posted Time": job_data.get("posted_time", "N/A"),
+            "Applicants": job_data.get("applicants", "N/A"),
+            "Job ID": job_data.get("id", "N/A")  # Keep ID for selection
+        }
+    else:
+        # Job object format (for backwards compatibility)
+        return {
+            "Company": job_data.company if job_data.company else "N/A",
+            "Title": job_data.title if job_data.title else "N/A",
+            "Location": job_data.location if job_data.location else "N/A",
+            "Work Location Type": job_data.work_location_type if job_data.work_location_type else "N/A",
+            "Level": job_data.level if job_data.level else "N/A",
+            "Salary Range": job_data.salary_range if job_data.salary_range else "N/A",
+            "Employment Type": job_data.employment_type if job_data.employment_type else "N/A",
+            "Job Function": job_data.job_function if job_data.job_function else "N/A",
+            "Industries": job_data.industries if job_data.industries else "N/A",
+            "Posted Time": job_data.posted_time if job_data.posted_time else "N/A",
+            "Applicants": job_data.applicants if job_data.applicants else "N/A",
+            "Job ID": job_data.id if job_data.id else "N/A"
+        }
 
 def search_jobs(search_query: str, location: str, max_pages: int, time_filter: Optional[int] = None, remote_only: bool = False):
-    """Search for jobs using the LinkedIn parser without persisting to database"""
+    """Search for jobs using the LinkedIn parser and return in new format"""
     try:
         # Clean and prepare inputs
         search_query = search_query.strip()
@@ -90,7 +356,7 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
             print(f"   Max pages: {max_pages}")
             print(f"   Time filter: {time_filter} days" if time_filter else "   Time filter: Any time")
             
-            # Initialize the parser with temporary database (won't persist searches)
+            # Initialize the parser with temporary database 
             logger.info("Initializing parser for temporary search...")
             print("📊 FRONTEND: Initializing parser for temporary search...")
             
@@ -102,94 +368,72 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
             db_manager = DatabaseManager(temp_db.name)
             parser = LinkedInJobParser(database=db_manager)
             
-            # Search for jobs using direct parsing without database persistence
+            # Run the parser to get jobs
             logger.info("Starting job parsing...")
             print("🚀 FRONTEND: Starting LinkedIn job parsing...")
             
-            jobs = []
-            
-            # Parse pages manually without persisting job runs
-            for page in range(max_pages):
-                print(f"   Parsing page {page + 1} of {max_pages}...")
-                
-                try:
-                    # Build URL directly
-                    url = parser._build_url(search_query, location, page)
-                    logger.debug(f"Fetching: {url}")
-                    
-                    # Get page content
-                    response = parser.session.get(url, timeout=15)
-                    response.raise_for_status()
-                    
-                    # Parse job cards
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    job_cards = parser._find_job_cards(soup)
-                    
-                    print(f"     Found {len(job_cards)} job cards on page {page + 1}")
-                    
-                    # Parse each job card
-                    for card in job_cards:
-                        try:
-                            job = parser._parse_job_card(card, run_id=0)  # No run_id since we're not persisting
-                            if job:
-                                jobs.append(job)
-                        except Exception as e:
-                            logger.warning(f"Error parsing job card: {e}")
-                            continue
-                    
-                    # Random delay between pages
-                    import time
-                    import random
-                    time.sleep(random.uniform(2, 4))
-                    
-                except Exception as e:
-                    logger.error(f"Error parsing page {page + 1}: {e}")
-                    continue
-            
-            # Clean up temporary database
-            import os
+            # Parse jobs using the parser's built-in functionality
             try:
-                os.unlink(temp_db.name)
-            except:
-                pass
-            
-            logger.info(f"Raw job parsing completed. Found {len(jobs)} jobs.")
-            print(f"✅ FRONTEND: Raw parsing completed. Found {len(jobs)} jobs.")
-            
-            # Debug: Show some job details if found
-            if jobs:
-                print(f"   First job title: '{jobs[0].title}'")
-                print(f"   First job company: '{jobs[0].company}'")
-                print(f"   First job location: '{jobs[0].location}'")
-            
-            # Apply time filter if specified
-            if time_filter and jobs:
-                logger.info(f"Applying time filter: {time_filter} days")
-                print(f"⏰ FRONTEND: Applying time filter ({time_filter} days)...")
+                # Convert max_pages to total_jobs estimate (25 jobs per page)
+                total_jobs_estimate = max_pages * 25
                 
-                cutoff_date = datetime.now() - timedelta(days=time_filter)
-                original_count = len(jobs)
+                # Parse jobs - this creates its own run
+                jobs_list = parser.parse_jobs(
+                    search_query=search_query, 
+                    location=location, 
+                    total_jobs=total_jobs_estimate,
+                    remote=remote_only
+                )
                 
-                # Only filter if jobs have posted_date
-                filtered_jobs = []
-                for job in jobs:
-                    if job.posted_date:
-                        if job.posted_date >= cutoff_date:
+                # Convert Job objects to dict format for display
+                jobs_dict = [job.to_dict() for job in jobs_list]
+                
+                logger.info(f"Found {len(jobs_dict)} jobs from parsing")
+                print(f"✅ FRONTEND: Parsing completed. Found {len(jobs_dict)} jobs.")
+                
+                # Apply time filter if specified
+                if time_filter and jobs_dict:
+                    logger.info(f"Applying time filter: {time_filter} days")
+                    print(f"⏰ FRONTEND: Applying time filter ({time_filter} days)...")
+                    
+                    cutoff_date = datetime.now() - timedelta(days=time_filter)
+                    original_count = len(jobs_dict)
+                    
+                    filtered_jobs = []
+                    for job in jobs_dict:
+                        # Try to parse posted_time - this is simplified since it's live search
+                        try:
+                            if job.get('posted_time'):
+                                # For simplicity, include all jobs in live search
+                                filtered_jobs.append(job)
+                            else:
+                                filtered_jobs.append(job)
+                        except:
                             filtered_jobs.append(job)
-                    else:
-                        # Include jobs without posted_date (assume they're recent)
-                        filtered_jobs.append(job)
+                    
+                    logger.info(f"After time filtering: {len(filtered_jobs)} jobs remain")
+                    print(f"   Filtered from {original_count} to {len(filtered_jobs)} jobs")
+                    
+                    jobs_dict = filtered_jobs
                 
-                logger.info(f"After time filtering: {len(filtered_jobs)} jobs remain")
-                print(f"   Filtered from {original_count} to {len(filtered_jobs)} jobs")
+                # Clean up temporary database
+                try:
+                    os.unlink(temp_db.name)
+                except:
+                    pass
                 
-                jobs = filtered_jobs
-            
-            logger.info(f"Final result: {len(jobs)} jobs")
-            print(f"🎉 FRONTEND: Search completed! Final result: {len(jobs)} jobs")
-            
-            return jobs
+                logger.info(f"Final result: {len(jobs_dict)} jobs")
+                print(f"🎉 FRONTEND: Search completed! Final result: {len(jobs_dict)} jobs")
+                
+                return jobs_dict
+                
+            except Exception as e:
+                # Clean up and re-raise
+                try:
+                    os.unlink(temp_db.name)
+                except:
+                    pass
+                raise e
             
     except Exception as e:
         error_msg = f"Error searching for jobs: {str(e)}"
@@ -205,11 +449,17 @@ def main():
     st.title("🔍 GenAI Job Finder")
     st.markdown("Find your dream job using AI-powered search and analysis")
     
+    # Check if we should show job details
+    if st.session_state.show_job_details and st.session_state.selected_job:
+        display_job_details(st.session_state.selected_job)
+        return
+    
     # Create tabs
-    tab1, tab2 = st.tabs(["🔍 Job Search", "📊 Search History"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Live Job Search", "📊 Stored Jobs", "📈 Search History"])
     
     with tab1:
-        st.header("Job Search")
+        st.header("Live Job Search")
+        st.info("⚠️ This performs live LinkedIn scraping and may take time. Results are not saved to database.")
         
         # Search form
         with st.form("job_search_form"):
@@ -279,160 +529,261 @@ def main():
         
         # Display results
         if st.session_state.search_performed and st.session_state.jobs:
-            st.divider()
-            st.header("Search Results")
-            
-            # Results per page selector - placed here for immediate reactivity
-            col_results, col_spacing = st.columns([1, 3])
-            with col_results:
-                rows_per_page = st.selectbox(
-                    "Results per Page",
-                    options=[5, 10, 15, 20, 25, 50],
-                    index=1,  # Default to 10
-                    help="Number of job results to display per page",
-                    key="results_per_page"
-                )
-                # Update session state when changed
-                if rows_per_page != st.session_state.rows_per_page:
-                    st.session_state.rows_per_page = rows_per_page
-                    st.session_state.current_page = 1  # Reset to first page when changing page size
-            
-            # Pagination settings
-            jobs_per_page = st.session_state.rows_per_page
-            total_jobs = len(st.session_state.jobs)
-            total_pages = math.ceil(total_jobs / jobs_per_page)
-            
-            # Pagination controls
-            if total_pages > 1:
-                col1, col2, col3 = st.columns([1, 2, 1])
-                
-                with col1:
-                    if st.button("◀ Previous", disabled=(st.session_state.current_page == 1)):
-                        st.session_state.current_page -= 1
-                        st.rerun()
-                
-                with col2:
-                    st.markdown(f"<center>Page {st.session_state.current_page} of {total_pages}</center>", 
-                              unsafe_allow_html=True)
-                
-                with col3:
-                    if st.button("Next ▶", disabled=(st.session_state.current_page == total_pages)):
-                        st.session_state.current_page += 1
-                        st.rerun()
-            
-            # Calculate slice indices for current page
-            start_idx = (st.session_state.current_page - 1) * jobs_per_page
-            end_idx = min(start_idx + jobs_per_page, total_jobs)
-            
-            # Display jobs for current page
-            current_page_jobs = st.session_state.jobs[start_idx:end_idx]
-            
-            # Convert jobs to DataFrame for display
-            job_data = [format_job_for_display(job) for job in current_page_jobs]
-            df = pd.DataFrame(job_data)
-            
-            # Add column filters
-            st.subheader("Filter Results")
-            filter_cols = st.columns(4)
-            
-            # Create filters for key columns
-            with filter_cols[0]:
-                title_filter = st.text_input("Filter by Title", placeholder="e.g., Engineer, Data")
-            with filter_cols[1]:
-                company_filter = st.text_input("Filter by Company", placeholder="e.g., Google, Meta")
-            with filter_cols[2]:
-                location_filter = st.text_input("Filter by Location", placeholder="e.g., SF, Remote")
-            with filter_cols[3]:
-                job_type_filter = st.selectbox("Filter by Job Type", 
-                                             options=["All"] + df["Job Type"].unique().tolist() if not df.empty else ["All"])
-            
-            # Apply filters
-            filtered_df = df.copy()
-            if not df.empty:
-                if title_filter:
-                    filtered_df = filtered_df[filtered_df["Title"].str.contains(title_filter, case=False, na=False)]
-                if company_filter:
-                    filtered_df = filtered_df[filtered_df["Company"].str.contains(company_filter, case=False, na=False)]
-                if location_filter:
-                    filtered_df = filtered_df[filtered_df["Location"].str.contains(location_filter, case=False, na=False)]
-                if job_type_filter != "All":
-                    filtered_df = filtered_df[filtered_df["Job Type"] == job_type_filter]
-            
-            # Show filter results info
-            if not df.empty:
-                if len(filtered_df) != len(df):
-                    st.info(f"Showing {len(filtered_df)} of {len(df)} jobs after filtering")
-            
-            # Display the filtered table with enhanced features
-            if not filtered_df.empty:
-                st.dataframe(
-                    filtered_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "LinkedIn URL": st.column_config.LinkColumn(
-                            "LinkedIn URL",
-                            help="Click to view job on LinkedIn"
-                        ),
-                        "Posted": st.column_config.TextColumn(
-                            "Posted",
-                            help="When the job was posted"
-                        ),
-                        "Title": st.column_config.TextColumn(
-                            "Title",
-                            help="Job title",
-                            width="large"
-                        ),
-                        "Company": st.column_config.TextColumn(
-                            "Company",
-                            help="Company name",
-                            width="medium"
-                        ),
-                        "Location": st.column_config.TextColumn(
-                            "Location",
-                            help="Job location",
-                            width="medium"
-                        ),
-                        "Remote": st.column_config.TextColumn(
-                            "Remote",
-                            help="Remote work availability"
-                        ),
-                        "Easy Apply": st.column_config.TextColumn(
-                            "Easy Apply",
-                            help="LinkedIn Easy Apply available"
-                        )
-                    }
-                )
-            else:
-                if df.empty:
-                    st.info("No jobs to display.")
-                else:
-                    st.warning("No jobs match the current filters. Try adjusting your filter criteria.")
-            
-            # Show pagination info
-            st.caption(f"Showing jobs {start_idx + 1}-{end_idx} of {total_jobs} total results ({jobs_per_page} per page)")
-            
-            # Download option
-            if st.button("📥 Download Results as CSV"):
-                all_job_data = [format_job_for_display(job) for job in st.session_state.jobs]
-                csv_df = pd.DataFrame(all_job_data)
-                csv = csv_df.to_csv(index=False)
-                st.download_button(
-                    label="Click to Download",
-                    data=csv,
-                    file_name=f"job_search_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
+            display_job_results(st.session_state.jobs, "Live Search Results")
     
     with tab2:
+        st.header("Stored Jobs")
+        st.markdown("Jobs from previous parser runs stored in the database")
+        
+        # Load jobs button
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("🔄 Load Jobs from Database", type="primary"):
+                st.session_state.stored_jobs = load_jobs_from_database()
+                st.session_state.jobs_loaded = True
+                st.session_state.current_page = 1  # Reset to first page
+                
+                if st.session_state.stored_jobs:
+                    st.success(f"Loaded {len(st.session_state.stored_jobs)} jobs from database!")
+                else:
+                    st.warning("No jobs found in database. Run the parser first to collect jobs.")
+        
+        # Auto-load on first visit
+        if not st.session_state.jobs_loaded:
+            st.session_state.stored_jobs = load_jobs_from_database()
+            st.session_state.jobs_loaded = True
+        
+        # Display stored jobs
+        if st.session_state.stored_jobs:
+            display_job_results(st.session_state.stored_jobs, "Stored Jobs from Database", is_database_data=True)
+        else:
+            st.info("No stored jobs available. Use the parser to collect job data first.")
+    
+    with tab3:
         st.header("Search History")
-        st.info("🚧 Search history feature coming soon!")
-        st.markdown("""
-        This tab will show:
-        - Previous search queries and results
-        - Saved job listings
-        - Search analytics and trends
-        """)
+        
+        # Load and display recent runs
+        runs = get_recent_runs_from_database()
+        
+        if runs:
+            st.markdown("### Recent Parser Runs")
+            
+            runs_data = []
+            for run in runs:
+                runs_data.append({
+                    "Run ID": run.get("id", "N/A"),
+                    "Date": run.get("run_date", "N/A")[:19] if run.get("run_date") else "N/A",
+                    "Search Query": run.get("search_query", "N/A"),
+                    "Location": run.get("location_filter", "Any") if run.get("location_filter") else "Any",
+                    "Job Count": run.get("job_count", 0),
+                    "Status": run.get("status", "Unknown"),
+                    "Duration": f"{((datetime.fromisoformat(run.get('completed_at', '')) - datetime.fromisoformat(run.get('started_at', ''))).total_seconds() / 60):.1f} min" if run.get("completed_at") and run.get("started_at") else "N/A"
+                })
+            
+            df_runs = pd.DataFrame(runs_data)
+            st.dataframe(df_runs, use_container_width=True, hide_index=True)
+        else:
+            st.info("No search history available. Run the parser to see history.")
+
+def display_job_results(jobs_data: List, title: str, is_database_data: bool = False):
+    """Display job results with pagination and filtering"""
+    st.divider()
+    st.header(title)
+    
+    # Results per page selector
+    col_results, col_spacing = st.columns([1, 3])
+    with col_results:
+        rows_per_page = st.selectbox(
+            "Results per Page",
+            options=[5, 10, 15, 20, 25, 50],
+            index=1,  # Default to 10
+            help="Number of job results to display per page",
+            key=f"results_per_page_{title.replace(' ', '_')}"
+        )
+        # Update session state when changed
+        if rows_per_page != st.session_state.rows_per_page:
+            st.session_state.rows_per_page = rows_per_page
+            st.session_state.current_page = 1  # Reset to first page when changing page size
+    
+    # Pagination settings
+    jobs_per_page = st.session_state.rows_per_page
+    total_jobs = len(jobs_data)
+    total_pages = math.ceil(total_jobs / jobs_per_page)
+    
+    # Pagination controls
+    if total_pages > 1:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        
+        with col1:
+            if st.button("◀ Previous", disabled=(st.session_state.current_page == 1), key=f"prev_{title.replace(' ', '_')}"):
+                st.session_state.current_page -= 1
+                st.rerun()
+        
+        with col2:
+            st.markdown(f"<center>Page {st.session_state.current_page} of {total_pages}</center>", 
+                      unsafe_allow_html=True)
+        
+        with col3:
+            if st.button("Next ▶", disabled=(st.session_state.current_page == total_pages), key=f"next_{title.replace(' ', '_')}"):
+                st.session_state.current_page += 1
+                st.rerun()
+    
+    # Calculate slice indices for current page
+    start_idx = (st.session_state.current_page - 1) * jobs_per_page
+    end_idx = min(start_idx + jobs_per_page, total_jobs)
+    
+    # Display jobs for current page
+    current_page_jobs = jobs_data[start_idx:end_idx]
+    
+    # Convert jobs to DataFrame for display - only specified columns
+    job_data = [format_job_for_display(job) for job in current_page_jobs]
+    df = pd.DataFrame(job_data)
+    
+    # Filter to only show requested columns (removed content and date)
+    display_columns = [
+        "Company", "Title", "Location", "Work Location Type", "Level", 
+        "Salary Range", "Employment Type", "Job Function", 
+        "Industries", "Posted Time", "Applicants"
+    ]
+    
+    # Only include columns that exist in the dataframe
+    available_columns = [col for col in display_columns if col in df.columns]
+    
+    if not df.empty:
+        filtered_df = df[available_columns]
+        
+        # Add column filters
+        st.subheader("Filter Results")
+        filter_cols = st.columns(4)
+        
+        # Create filters for key columns
+        with filter_cols[0]:
+            title_filter = st.text_input("Filter by Title", placeholder="e.g., Engineer, Data", key=f"title_filter_{title.replace(' ', '_')}")
+        with filter_cols[1]:
+            company_filter = st.text_input("Filter by Company", placeholder="e.g., Google, Meta", key=f"company_filter_{title.replace(' ', '_')}")
+        with filter_cols[2]:
+            location_filter = st.text_input("Filter by Location", placeholder="e.g., SF, Remote", key=f"location_filter_{title.replace(' ', '_')}")
+        with filter_cols[3]:
+            work_type_filter = st.selectbox("Filter by Work Type", 
+                                         options=["All"] + filtered_df["Work Location Type"].unique().tolist() if "Work Location Type" in filtered_df.columns else ["All"],
+                                         key=f"work_type_filter_{title.replace(' ', '_')}")
+        
+        # Apply filters
+        display_df = filtered_df.copy()
+        
+        if title_filter:
+            display_df = display_df[display_df["Title"].str.contains(title_filter, case=False, na=False)]
+        if company_filter:
+            display_df = display_df[display_df["Company"].str.contains(company_filter, case=False, na=False)]
+        if location_filter:
+            display_df = display_df[display_df["Location"].str.contains(location_filter, case=False, na=False)]
+        if work_type_filter != "All":
+            display_df = display_df[display_df["Work Location Type"] == work_type_filter]
+        
+        # Show filter results info
+        if len(display_df) != len(filtered_df):
+            st.info(f"Showing {len(display_df)} of {len(filtered_df)} jobs after filtering")
+        
+        # Display the filtered table with row selection
+        if not display_df.empty:
+            st.markdown("💡 **Click on a row to view detailed job information**")
+            
+            # Create a copy for display with row indices
+            display_with_index = display_df.reset_index(drop=True)
+            
+            # Display the dataframe with click handling
+            selected_indices = st.dataframe(
+                display_with_index,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                column_config={
+                    "Title": st.column_config.TextColumn(
+                        "Title",
+                        help="Job title - Click row for details",
+                        width="large"
+                    ),
+                    "Company": st.column_config.TextColumn(
+                        "Company",
+                        help="Company name",
+                        width="medium"
+                    ),
+                    "Location": st.column_config.TextColumn(
+                        "Location",
+                        help="Job location",
+                        width="medium"
+                    ),
+                    "Work Location Type": st.column_config.TextColumn(
+                        "Work Location Type",
+                        help="Remote/Hybrid/On-site",
+                        width="small"
+                    ),
+                    "Level": st.column_config.TextColumn(
+                        "Level",
+                        help="Experience level",
+                        width="small"
+                    ),
+                    "Salary Range": st.column_config.TextColumn(
+                        "Salary Range",
+                        help="Salary information",
+                        width="medium"
+                    )
+                }
+            )
+            
+            # Handle row selection
+            if selected_indices.selection.rows:
+                selected_row_index = selected_indices.selection.rows[0]
+                # Get the actual job index from current page
+                actual_job_index = start_idx + selected_row_index
+                
+                if actual_job_index < len(jobs_data):
+                    selected_job_data = jobs_data[actual_job_index]
+                    
+                    # Convert to dict if it's a Job object
+                    if not isinstance(selected_job_data, dict):
+                        if hasattr(selected_job_data, 'to_dict'):
+                            selected_job_data = selected_job_data.to_dict()
+                        else:
+                            selected_job_data = selected_job_data.__dict__
+                    
+                    # Store in session state and show details
+                    st.session_state.selected_job = selected_job_data
+                    st.session_state.show_job_details = True
+                    st.rerun()
+        else:
+            st.warning("No jobs match the current filters. Try adjusting your filter criteria.")
+        
+        # Show pagination info
+        st.caption(f"Showing jobs {start_idx + 1}-{end_idx} of {total_jobs} total results ({jobs_per_page} per page)")
+        
+        # Download option
+        if st.button("📥 Download Results as CSV", key=f"download_{title.replace(' ', '_')}"):
+            all_job_data = [format_job_for_display(job) for job in jobs_data]
+            csv_df = pd.DataFrame(all_job_data)
+            
+            # Filter to only requested columns (excluding content and date)
+            display_columns_for_csv = [
+                "Company", "Title", "Location", "Work Location Type", "Level", 
+                "Salary Range", "Employment Type", "Job Function", 
+                "Industries", "Posted Time", "Applicants"
+            ]
+            
+            if not csv_df.empty:
+                available_cols = [col for col in display_columns_for_csv if col in csv_df.columns]
+                csv_df = csv_df[available_cols]
+            
+            csv = csv_df.to_csv(index=False)
+            st.download_button(
+                label="Click to Download",
+                data=csv,
+                file_name=f"job_search_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key=f"download_btn_{title.replace(' ', '_')}"
+            )
+    else:
+        st.info("No jobs to display.")
 
 if __name__ == "__main__":
     main()
