@@ -5,14 +5,14 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import logging
 
-from .models import Job, JobRun, JobType, ExperienceLevel
+from .models import Job, JobRun
 
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages database operations for job data"""
+    """Manages database operations for job data - matches legacy structure"""
     
     def __init__(self, db_path: str = "jobs.db"):
         self.db_path = Path(db_path)
@@ -34,7 +34,7 @@ class DatabaseManager:
             conn.close()
     
     def _initialize_database(self):
-        """Create database tables if they don't exist"""
+        """Create database tables if they don't exist - matches legacy structure"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -54,38 +54,58 @@ class DatabaseManager:
                 )
             ''')
             
-            # Create jobs table
+            # Create jobs table with legacy column structure + location fields
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS jobs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_id TEXT NOT NULL,
-                    run_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
+                    id TEXT PRIMARY KEY,
                     company TEXT NOT NULL,
-                    location TEXT NOT NULL,
-                    description TEXT,
-                    posted_date TIMESTAMP,
+                    title TEXT NOT NULL,
+                    location TEXT,
+                    work_location_type TEXT,
+                    level TEXT,
                     salary_range TEXT,
-                    job_type TEXT,
-                    experience_level TEXT,
-                    skills TEXT,
-                    benefits TEXT,
-                    applicants_count INTEGER,
-                    remote_option BOOLEAN DEFAULT 0,
-                    easy_apply BOOLEAN DEFAULT 0,
-                    linkedin_url TEXT,
-                    company_linkedin_url TEXT,
+                    content TEXT,
+                    employment_type TEXT,
+                    job_function TEXT,
+                    industries TEXT,
+                    posted_time TEXT,
+                    applicants TEXT,
+                    job_id TEXT NOT NULL,
+                    date TEXT,
+                    parsing_link TEXT,
+                    job_posting_link TEXT,
+                    run_id INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (run_id) REFERENCES job_runs (id),
-                    UNIQUE(job_id, run_id)
+                    FOREIGN KEY (run_id) REFERENCES job_runs (id)
                 )
             ''')
+            
+            # Migrate existing tables if needed
+            self._migrate_tables(cursor)
             
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_jobs_run_id ON jobs(run_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_jobs_job_id ON jobs(job_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_job_runs_run_date ON job_runs(run_date)')
+    
+    def _migrate_tables(self, cursor):
+        """Add new columns to existing tables if they don't exist"""
+        try:
+            # Check if location column exists
+            cursor.execute("PRAGMA table_info(jobs)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'location' not in columns:
+                cursor.execute('ALTER TABLE jobs ADD COLUMN location TEXT')
+                logger.info("Added location column to jobs table")
+            
+            if 'work_location_type' not in columns:
+                cursor.execute('ALTER TABLE jobs ADD COLUMN work_location_type TEXT')
+                logger.info("Added work_location_type column to jobs table")
+                
+        except Exception as e:
+            logger.warning(f"Migration warning: {e}")
     
     def create_job_run(self, search_query: Optional[str] = None, 
                       location_filter: Optional[str] = None) -> JobRun:
@@ -118,42 +138,40 @@ class DatabaseManager:
                 WHERE id = ?
             ''', (status, job_count, error_message, datetime.now(), run_id))
     
-    def save_job(self, job: Job) -> int:
-        """Save a job to the database"""
+    def save_job(self, job: Job) -> str:
+        """Save a job to the database - matches legacy format"""
         job_dict = job.to_dict()
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Check if job already exists for this run
+            # Check if job already exists
             cursor.execute('''
-                SELECT id FROM jobs WHERE job_id = ? AND run_id = ?
-            ''', (job.job_id, job.run_id))
+                SELECT id FROM jobs WHERE id = ?
+            ''', (job.id,))
             
             existing = cursor.fetchone()
             if existing:
-                logger.debug(f"Job {job.job_id} already exists for run {job.run_id}")
+                logger.debug(f"Job {job.id} already exists")
                 return existing['id']
             
-            # Insert new job
+            # Insert new job with legacy column structure + location fields
             cursor.execute('''
                 INSERT INTO jobs (
-                    job_id, run_id, title, company, location, description,
-                    posted_date, salary_range, job_type, experience_level,
-                    skills, benefits, applicants_count, remote_option,
-                    easy_apply, linkedin_url, company_linkedin_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, company, title, location, work_location_type, level, salary_range, content,
+                    employment_type, job_function, industries, posted_time,
+                    applicants, job_id, date, parsing_link, job_posting_link, run_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                job_dict['job_id'], job_dict['run_id'], job_dict['title'],
-                job_dict['company'], job_dict['location'], job_dict['description'],
-                job_dict['posted_date'], job_dict['salary_range'], job_dict['job_type'],
-                job_dict['experience_level'], job_dict['skills'], job_dict['benefits'],
-                job_dict['applicants_count'], job_dict['remote_option'],
-                job_dict['easy_apply'], job_dict['linkedin_url'],
-                job_dict['company_linkedin_url']
+                job_dict['id'], job_dict['company'], job_dict['title'],
+                job_dict['location'], job_dict['work_location_type'], job_dict['level'], 
+                job_dict['salary_range'], job_dict['content'], job_dict['employment_type'], 
+                job_dict['job_function'], job_dict['industries'], job_dict['posted_time'], 
+                job_dict['applicants'], job_dict['job_id'], job_dict['date'], 
+                job_dict['parsing_link'], job_dict['job_posting_link'], job_dict['run_id']
             ))
             
-            return cursor.lastrowid
+            return job.id
     
     def save_jobs_batch(self, jobs: List[Job]) -> int:
         """Save multiple jobs in a batch"""
@@ -163,7 +181,7 @@ class DatabaseManager:
                 self.save_job(job)
                 saved_count += 1
             except Exception as e:
-                logger.error(f"Error saving job {job.job_id}: {e}")
+                logger.error(f"Error saving job {job.id}: {e}")
         
         return saved_count
     
@@ -184,3 +202,57 @@ class DatabaseManager:
                 LIMIT ?
             ''', (limit,))
             return [dict(row) for row in cursor.fetchall()]
+    
+    def export_jobs_to_csv(self, filename: str, run_id: Optional[int] = None) -> str:
+        """Export jobs to CSV in legacy format"""
+        import pandas as pd
+        
+        with self.get_connection() as conn:
+            if run_id:
+                query = '''
+                    SELECT id, company, title, location, work_location_type, level, salary_range, content,
+                           employment_type, job_function, industries, posted_time,
+                           applicants, job_id, date, parsing_link, job_posting_link
+                    FROM jobs WHERE run_id = ?
+                    ORDER BY created_at DESC
+                '''
+                df = pd.read_sql_query(query, conn, params=(run_id,))
+            else:
+                query = '''
+                    SELECT id, company, title, location, work_location_type, level, salary_range, content,
+                           employment_type, job_function, industries, posted_time,
+                           applicants, job_id, date, parsing_link, job_posting_link
+                    FROM jobs
+                    ORDER BY created_at DESC
+                '''
+                df = pd.read_sql_query(query, conn)
+        
+        df.to_csv(filename, index=False, encoding="utf-8-sig")
+        return filename
+        logger.info(f"Exported {len(df)} jobs to {filename}")
+    
+    def get_all_jobs_as_dataframe(self, run_id: Optional[int] = None):
+        """Get all jobs as pandas DataFrame in legacy format"""
+        import pandas as pd
+        
+        with self.get_connection() as conn:
+            if run_id:
+                query = '''
+                    SELECT id, company, title, location, work_location_type, level, salary_range, content,
+                           employment_type, job_function, industries, posted_time,
+                           applicants, job_id, date, parsing_link, job_posting_link
+                    FROM jobs WHERE run_id = ?
+                    ORDER BY created_at DESC
+                '''
+                df = pd.read_sql_query(query, conn, params=(run_id,))
+            else:
+                query = '''
+                    SELECT id, company, title, location, work_location_type, level, salary_range, content,
+                           employment_type, job_function, industries, posted_time,
+                           applicants, job_id, date, parsing_link, job_posting_link
+                    FROM jobs
+                    ORDER BY created_at DESC
+                '''
+                df = pd.read_sql_query(query, conn)
+        
+        return df

@@ -2,68 +2,78 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Dict, Any
 from enum import Enum
+import uuid
 
 
 class JobType(Enum):
-    FULL_TIME = "full_time"
-    PART_TIME = "part_time"
-    CONTRACT = "contract"
-    INTERNSHIP = "internship"
-    TEMPORARY = "temporary"
-    OTHER = "other"
+    FULL_TIME = "Full-time"
+    PART_TIME = "Part-time"
+    CONTRACT = "Contract"
+    INTERNSHIP = "Internship"
+    TEMPORARY = "Temporary"
+    OTHER = "Other"
 
 
 class ExperienceLevel(Enum):
-    ENTRY = "entry"
-    MID = "mid"
-    SENIOR = "senior"
-    DIRECTOR = "director"
-    EXECUTIVE = "executive"
-    NOT_SPECIFIED = "not_specified"
+    ENTRY = "Entry level"
+    MID = "Mid-Senior level"
+    SENIOR = "Senior level"
+    DIRECTOR = "Director"
+    EXECUTIVE = "Executive"
+    NOT_SPECIFIED = "Not Applicable"
 
 
 @dataclass
 class Job:
-    """Represents a job listing from LinkedIn"""
+    """Represents a job listing from LinkedIn - matches legacy output structure"""
     job_id: str
     title: str
     company: str
-    location: str
-    description: str
-    posted_date: Optional[datetime] = None
+    content: str  # Full job description content
+    location: Optional[str] = None  # Job location
+    work_location_type: Optional[str] = None  # Remote/Hybrid/On-site
+    level: Optional[str] = None  # Seniority level
     salary_range: Optional[str] = None
-    job_type: Optional[JobType] = None
-    experience_level: Optional[ExperienceLevel] = None
-    skills: Optional[list[str]] = None
-    benefits: Optional[list[str]] = None
-    applicants_count: Optional[int] = None
-    remote_option: bool = False
-    easy_apply: bool = False
-    linkedin_url: Optional[str] = None
-    company_linkedin_url: Optional[str] = None
+    employment_type: Optional[str] = None  # Full-time, Part-time, etc.
+    job_function: Optional[str] = None  # Job function category
+    industries: Optional[str] = None  # Industry category
+    posted_time: Optional[str] = None  # When job was posted (text format)
+    applicants: Optional[str] = None  # Number of applicants
+    date: Optional[str] = None  # Date when parsed
+    parsing_link: Optional[str] = None  # URL used to parse the job
+    job_posting_link: Optional[str] = None  # Main LinkedIn job posting URL
+    id: Optional[str] = None  # UUID for each record
     run_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
+    def __post_init__(self):
+        """Generate UUID if not provided"""
+        if self.id is None:
+            self.id = str(uuid.uuid4())
+        if self.date is None:
+            self.date = datetime.now().date().isoformat()
+    
     def to_dict(self) -> Dict[str, Any]:
-        """Convert job to dictionary for database storage"""
+        """Convert job to dictionary for database storage - matches legacy format"""
         return {
-            'job_id': self.job_id,
-            'title': self.title,
+            'id': self.id,
             'company': self.company,
+            'title': self.title,
             'location': self.location,
-            'description': self.description,
-            'posted_date': self.posted_date.isoformat() if self.posted_date else None,
+            'work_location_type': self.work_location_type,
+            'level': self.level,
             'salary_range': self.salary_range,
-            'job_type': self.job_type.value if self.job_type else None,
-            'experience_level': self.experience_level.value if self.experience_level else None,
-            'skills': ','.join(self.skills) if self.skills else None,
-            'benefits': ','.join(self.benefits) if self.benefits else None,
-            'applicants_count': self.applicants_count,
-            'remote_option': self.remote_option,
-            'easy_apply': self.easy_apply,
-            'linkedin_url': self.linkedin_url,
-            'company_linkedin_url': self.company_linkedin_url,
+            'content': self.content,
+            'employment_type': self.employment_type,
+            'job_function': self.job_function,
+            'industries': self.industries,
+            'posted_time': self.posted_time,
+            'applicants': self.applicants,
+            'job_id': self.job_id,
+            'date': self.date,
+            'parsing_link': self.parsing_link,
+            'job_posting_link': self.job_posting_link,
             'run_id': self.run_id
         }
 
