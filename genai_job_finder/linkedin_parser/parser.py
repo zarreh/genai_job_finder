@@ -16,6 +16,88 @@ from ..legacy.utils import text_clean
 logger = logging.getLogger(__name__)
 
 
+def html_to_markdown(html_content: str) -> str:
+    """Convert HTML content to Markdown format while preserving structure"""
+    if not html_content:
+        return ""
+    
+    # Create BeautifulSoup object to parse HTML
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # Convert common HTML tags to Markdown equivalents
+    # Handle headings
+    for i in range(1, 7):
+        for tag in soup.find_all(f'h{i}'):
+            tag.string = f"{'#' * i} {tag.get_text().strip()}\n\n"
+            tag.unwrap()
+    
+    # Handle bold text
+    for tag in soup.find_all(['b', 'strong']):
+        if tag.string:
+            tag.string = f"**{tag.get_text().strip()}**"
+        tag.unwrap()
+    
+    # Handle italic text
+    for tag in soup.find_all(['i', 'em']):
+        if tag.string:
+            tag.string = f"*{tag.get_text().strip()}*"
+        tag.unwrap()
+    
+    # Handle unordered lists
+    for ul in soup.find_all('ul'):
+        list_items = []
+        for li in ul.find_all('li'):
+            list_items.append(f"• {li.get_text().strip()}")
+        ul.replace_with('\n'.join(list_items) + '\n\n')
+    
+    # Handle ordered lists
+    for ol in soup.find_all('ol'):
+        list_items = []
+        for i, li in enumerate(ol.find_all('li'), 1):
+            list_items.append(f"{i}. {li.get_text().strip()}")
+        ol.replace_with('\n'.join(list_items) + '\n\n')
+    
+    # Handle links
+    for a in soup.find_all('a', href=True):
+        link_text = a.get_text().strip()
+        href = a.get('href')
+        if link_text and href:
+            a.replace_with(f"[{link_text}]({href})")
+        else:
+            a.unwrap()
+    
+    # Handle line breaks
+    for br in soup.find_all('br'):
+        br.replace_with('\n')
+    
+    # Handle paragraphs
+    for p in soup.find_all('p'):
+        p_text = p.get_text().strip()
+        if p_text:
+            p.replace_with(f"{p_text}\n\n")
+        else:
+            p.unwrap()
+    
+    # Handle divs by adding line breaks
+    for div in soup.find_all('div'):
+        div_text = div.get_text().strip()
+        if div_text:
+            div.replace_with(f"{div_text}\n\n")
+        else:
+            div.unwrap()
+    
+    # Get the final text content
+    markdown_text = soup.get_text()
+    
+    # Clean up extra whitespace and line breaks
+    markdown_text = re.sub(r'\n\s*\n\s*\n+', '\n\n', markdown_text)  # Multiple line breaks to double
+    markdown_text = re.sub(r'[ \t]+', ' ', markdown_text)  # Multiple spaces to single
+    markdown_text = re.sub(r'[ \t]*\n', '\n', markdown_text)  # Remove trailing spaces
+    markdown_text = markdown_text.strip()
+    
+    return markdown_text
+
+
 class LinkedInJobParser:
     """LinkedIn job parser using requests and BeautifulSoup - matches legacy functionality"""
     
@@ -241,9 +323,11 @@ class LinkedInJobParser:
                 desc_elem = soup.find(
                     "div", {"class": "description__text description__text--rich"}
                 )
-                job_info["content"] = text_clean(
-                    desc_elem.text.strip() if desc_elem else ""
-                )
+                if desc_elem:
+                    # Use HTML-to-Markdown conversion for better formatting preservation
+                    job_info["content"] = html_to_markdown(str(desc_elem))
+                else:
+                    job_info["content"] = ""
             except:
                 job_info["content"] = ""
             
