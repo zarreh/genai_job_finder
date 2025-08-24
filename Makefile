@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-frontend test clean
+.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend test clean
 
 # Default target
 help:
@@ -8,6 +8,8 @@ help:
 	@echo "  install        - Install dependencies using Poetry"
 	@echo "  run-parser     - Run the LinkedIn job parser (simple script)"
 	@echo "  run-parser-mod - Run the LinkedIn job parser (as module)"
+	@echo "  run-pipeline   - Run parser + data cleaner pipeline (full processing)"
+	@echo "  run-cleaner    - Run data cleaner only on existing data"
 	@echo "  run-frontend   - Run the frontend application"
 	@echo "  test           - Run tests"
 	@echo "  clean          - Clean up temporary files"
@@ -23,6 +25,20 @@ run-parser:
 # Run the LinkedIn parser (as module)
 run-parser-mod:
 	poetry run python -m genai_job_finder.linkedin_parser.run_parser
+
+# Run full pipeline: parser + data cleaner
+run-pipeline:
+	@echo "🚀 Running full processing pipeline..."
+	@echo "📥 Step 1: Running LinkedIn parser..."
+	poetry run python run_parser.py
+	@echo "🧹 Step 2: Running AI data cleaner..."
+	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose
+	@echo "✅ Pipeline complete! Check data/jobs.db for results."
+
+# Run data cleaner only
+run-cleaner:
+	@echo "🧹 Running AI data cleaner on existing data..."
+	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose
 
 # Run the frontend application
 run-frontend:
