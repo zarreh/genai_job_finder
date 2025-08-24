@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import math
+import time
+from bs4 import BeautifulSoup
 
 # Add the parent directory to the path so we can import from genai_job_finder
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -151,8 +153,16 @@ def display_job_details(job_data: dict):
     content = job_data.get('content', 'No job description available.')
     
     if content and content != 'N/A':
-        # Use the enhanced content formatter
-        render_formatted_content(content)
+        # Format the content for better readability
+        formatted_content = content.replace('\\n', '\n').replace('\\t', '\t')
+        
+        # Display in a scrollable container
+        with st.container():
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; max-height: 500px; overflow-y: auto;">
+                <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">{formatted_content}</pre>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("No detailed job description available.")
     
@@ -183,120 +193,6 @@ def find_job_by_id(job_id: str, jobs_data: List[dict]) -> Optional[dict]:
             if hasattr(job, 'id') and job.id == job_id:
                 return job.to_dict() if hasattr(job, 'to_dict') else job.__dict__
     return None
-
-def format_job_content(content: str) -> str:
-    """Format job content to match original LinkedIn structure as closely as possible"""
-    if not content or content == 'N/A':
-        return "No detailed job description available."
-    
-    import re
-    
-    # Clean up common issues
-    formatted = content.replace('\\n', '\n').replace('\\t', '\t')
-    
-    # Remove excessive "Show more Show less" patterns
-    formatted = re.sub(r'\s*Show more Show less\s*', '', formatted)
-    formatted = re.sub(r'\s*Show more\s*$', '', formatted)
-    formatted = re.sub(r'\s*Show less\s*$', '', formatted)
-    
-    # Step 1: Identify and separate major sections
-    # Break content at common LinkedIn section headers
-    section_headers = [
-        r'(What We Can Offer You)',
-        r'(About the [Jj]ob)',
-        r'(Position Responsibilities)',
-        r'(Job Responsibilities)', 
-        r'(Key Responsibilities)',
-        r'(Responsibilities)',
-        r'(Requirements)',
-        r'(Qualifications)',
-        r'(Experience Required)',
-        r'(Skills Required)',
-        r'(What We Offer)',
-        r'(Benefits)',
-        r'(About [A-Za-z\s&,]+)',
-        r'(Company Information)',
-    ]
-    
-    # Add breaks before major sections
-    for header_pattern in section_headers:
-        formatted = re.sub(f'({header_pattern})([A-Z])', r'\n\n## \1\n\n\2', formatted, flags=re.IGNORECASE)
-    
-    # Step 2: Identify subsection headers (usually end with colon)
-    subsection_patterns = [
-        r'(Marketing Activities:)',
-        r'(Sales Activities:)',
-        r'(Administrative Activities:)',
-        r'(Customer Service:)',
-        r'(Training:)',
-        r'([A-Z][A-Za-z\s]+ Activities:)',
-        r'([A-Z][A-Za-z\s]+ Duties:)',
-        r'([A-Z][A-Za-z\s]+ Requirements:)',
-    ]
-    
-    for pattern in subsection_patterns:
-        formatted = re.sub(f'({pattern})([A-Z])', r'\n\n### \1\n\n\2', formatted, flags=re.IGNORECASE)
-    
-    # Step 3: Create bullet points from run-together benefit lists
-    # Look for patterns like "ItemNameDescriptionNextItem"
-    benefit_patterns = [
-        r'([A-Z][a-zA-Z\s]+ -- [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',  # "Career Growth -- desc" followed by next item
-        r'([A-Z][a-zA-Z\s]+ - [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',   # "Career Growth - desc" followed by next item
-        r'(Paid [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',              # "Paid Time Off" followed by next item
-        r'(Health[^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',                      # "Health, Dental, Vision..." followed by next item
-        r'(Employee [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',          # "Employee Assistance Program" followed by next item
-        r'(Tuition [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',           # "Tuition Assistance Program" followed by next item
-        r'(Financial [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',         # "Financial Coaching..." followed by next item
-        r'(Floating [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',          # "Floating Cultural Holiday" followed by next item
-        r'(Family [A-Z][a-zA-Z\s]*?\([^)]+\))([A-Z][a-zA-Z]+ [a-z])',   # "Family Focused Benefits (...)" followed by next item
-        r'(Retirement [A-Z][a-zA-Z\s]*?)([A-Z][a-zA-Z]+ [a-z])',        # "Retirement Plan" followed by next item
-        r'(Incentive [a-z][^A-Z]*?)([A-Z][a-zA-Z]+ [a-z])',            # "Incentive program..." followed by next item
-    ]
-    
-    for pattern in benefit_patterns:
-        formatted = re.sub(pattern, r'• \1\n• \2', formatted)
-    
-    # Step 4: Handle action verbs that should be bullet points
-    action_patterns = [
-        r'(Execute the [a-z][^A-Z.]*?\.)',    # "Execute the proactive marketing..."
-        r'(Complete [a-z][^A-Z.]*?\.)',       # "Complete assigned daily..."
-        r'(Provide [a-z][^A-Z.]*?\.)',        # "Provide effective customer..."
-        r'(Act as [a-z][^A-Z.]*?\.)',         # "Act as a digital ambassador..."
-        r'(Initiate [a-z][^A-Z.]*?\.)',       # "Initiate quality financial..."
-        r'(Support [a-z][^A-Z.]*?\.)',        # "Support consumer portfolio..."
-        r'(Assist [a-z][^A-Z.]*?\.)',         # "Assist in community awareness..."
-        r'(Maintain [a-z][^A-Z.]*?\.)',       # "Maintain customer confidence..."
-        r'(Ensure [a-z][^A-Z.]*?\.)',         # "Ensure compliance..."
-    ]
-    
-    for pattern in action_patterns:
-        formatted = re.sub(pattern, r'\n• \1\n', formatted, flags=re.IGNORECASE)
-    
-    # Step 5: Break very long paragraphs at sentence boundaries
-    formatted = re.sub(r'\.([A-Z][a-z]{3,})', r'.\n\n\1', formatted)
-    
-    # Step 6: Clean up formatting
-    # Remove extra whitespace and normalize line breaks
-    formatted = re.sub(r'\n\s*\n\s*\n+', '\n\n', formatted)
-    formatted = re.sub(r'^\s+', '', formatted, flags=re.MULTILINE)
-    
-    # Fix bullet point spacing
-    formatted = re.sub(r'\n•', '\n• ', formatted)
-    formatted = re.sub(r'• +', '• ', formatted)
-    
-    # Clean up headers
-    formatted = re.sub(r'##\s+', '## ', formatted)
-    formatted = re.sub(r'###\s+', '### ', formatted)
-    
-    return formatted.strip()
-
-def render_formatted_content(content: str) -> None:
-    """Render formatted job content using Streamlit components"""
-    formatted_content = format_job_content(content)
-    
-    # Simple approach: just use st.markdown with the formatted content
-    # This should definitely work and show the formatting
-    st.markdown(formatted_content)
 
 def format_job_for_display(job_data: dict) -> dict:
     """Format job data for display in table - supports both Job objects and dict data"""
@@ -335,7 +231,7 @@ def format_job_for_display(job_data: dict) -> dict:
         }
 
 def search_jobs(search_query: str, location: str, max_pages: int, time_filter: Optional[int] = None, remote_only: bool = False):
-    """Search for jobs using the LinkedIn parser and return in new format"""
+    """Enhanced search with real-time progress tracking"""
     try:
         # Clean and prepare inputs
         search_query = search_query.strip()
@@ -347,18 +243,18 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
         
         logger.info(f"Starting job search for: '{search_query}' in '{location or 'Any location'}' (max_pages: {max_pages}, remote_only: {remote_only})")
         
-        with st.spinner(f"Searching for jobs... This may take a few minutes (parsing {max_pages} pages)"):
-            # Show progress in terminal
-            print(f"\n🔍 FRONTEND: Starting job search...")
-            print(f"   Query: '{search_query}'")
-            print(f"   Location: '{location}' {'(Any location)' if not location else ''}")
-            print(f"   Remote only: {remote_only}")
-            print(f"   Max pages: {max_pages}")
-            print(f"   Time filter: {time_filter} days" if time_filter else "   Time filter: Any time")
+        # Create progress tracking UI elements
+        progress_container = st.container()
+        with progress_container:
+            # Status display in colored box
+            status_placeholder = st.empty()
             
-            # Initialize the parser with temporary database 
+            # Step 1: Initialize
+            with status_placeholder.container():
+                st.info("🚀 Initializing LinkedIn job parser...")
+            
+            # Initialize the parser with temporary database
             logger.info("Initializing parser for temporary search...")
-            print("📊 FRONTEND: Initializing parser for temporary search...")
             
             # Use a temporary in-memory database
             import tempfile
@@ -368,43 +264,92 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
             db_manager = DatabaseManager(temp_db.name)
             parser = LinkedInJobParser(database=db_manager)
             
-            # Run the parser to get jobs
+            # Step 2: Start parsing
+            with status_placeholder.container():
+                st.info("🔍 Searching for job listings...")
             logger.info("Starting job parsing...")
-            print("🚀 FRONTEND: Starting LinkedIn job parsing...")
             
             # Parse jobs using the parser's built-in functionality
             try:
                 # Convert max_pages to total_jobs estimate (25 jobs per page)
                 total_jobs_estimate = max_pages * 25
                 
-                # Parse jobs - this creates its own run
-                jobs_list = parser.parse_jobs(
-                    search_query=search_query, 
-                    location=location, 
+                # Step 3: Getting job IDs
+                with status_placeholder.container():
+                    st.info(f"📋 Collecting job IDs from {max_pages} pages...")
+                
+                # Get job IDs first
+                job_ids = parser._get_job_ids(
+                    search_query=search_query,
+                    location=location,
                     total_jobs=total_jobs_estimate,
-                    remote=remote_only
+                    time_filter="r86400",
+                    remote=remote_only,
+                    parttime=False
                 )
+                
+                # Step 4: Found job IDs
+                with status_placeholder.container():
+                    st.info(f"✅ Found {len(job_ids)} job listings! Now fetching detailed information...")
+                time.sleep(1)  # Brief pause to show the count
+                
+                # Step 5: Getting detailed job data with progress tracking
+                with status_placeholder.container():
+                    st.info("� Extracting detailed job information...")
+                
+                # Create a temporary job run
+                job_run = db_manager.create_job_run(search_query, location)
+                
+                # Get detailed data with progress updates
+                jobs_list = []
+                for i, job_id in enumerate(job_ids, 1):
+                    with status_placeholder.container():
+                        st.info(f"🔄 Getting job details ({i}/{len(job_ids)})...")
+                    
+                    try:
+                        job_details_url = parser.JOB_DETAILS_URL.format(job_id)
+                        response = parser.session.get(job_details_url, timeout=15)
+                        response.raise_for_status()
+                        soup = BeautifulSoup(response.text, "html.parser")
+                        
+                        job_info = parser._extract_job_details(soup, job_id, 
+                                                             datetime.now().date().isoformat(), 
+                                                             job_details_url, job_run.id)
+                        if job_info:
+                            jobs_list.append(job_info)
+                            # Save individual job to database
+                            db_manager.save_job(job_info)
+                        
+                        import random
+                        time.sleep(random.uniform(1, 3))
+                        
+                    except Exception as e:
+                        logger.warning(f"Error fetching job {job_id}: {e}")
+                        continue
+                
+                # Step 6: Processing results
+                with status_placeholder.container():
+                    st.info(f"⚙️ Processing {len(jobs_list)} job details...")
                 
                 # Convert Job objects to dict format for display
                 jobs_dict = [job.to_dict() for job in jobs_list]
                 
                 logger.info(f"Found {len(jobs_dict)} jobs from parsing")
-                print(f"✅ FRONTEND: Parsing completed. Found {len(jobs_dict)} jobs.")
                 
-                # Apply time filter if specified
+                # Step 7: Apply time filter if specified
                 if time_filter and jobs_dict:
-                    logger.info(f"Applying time filter: {time_filter} days")
-                    print(f"⏰ FRONTEND: Applying time filter ({time_filter} days)...")
+                    with status_placeholder.container():
+                        st.info(f"⏰ Applying time filter ({time_filter} days)...")
                     
+                    logger.info(f"Applying time filter: {time_filter} days")
                     cutoff_date = datetime.now() - timedelta(days=time_filter)
                     original_count = len(jobs_dict)
                     
                     filtered_jobs = []
                     for job in jobs_dict:
-                        # Try to parse posted_time - this is simplified since it's live search
+                        # For simplicity in live search, include all jobs
                         try:
                             if job.get('posted_time'):
-                                # For simplicity, include all jobs in live search
                                 filtered_jobs.append(job)
                             else:
                                 filtered_jobs.append(job)
@@ -412,9 +357,11 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                             filtered_jobs.append(job)
                     
                     logger.info(f"After time filtering: {len(filtered_jobs)} jobs remain")
-                    print(f"   Filtered from {original_count} to {len(filtered_jobs)} jobs")
-                    
                     jobs_dict = filtered_jobs
+                
+                # Step 8: Complete
+                with status_placeholder.container():
+                    st.success(f"🎉 Search completed! Found {len(jobs_dict)} jobs ready to view.")
                 
                 # Clean up temporary database
                 try:
@@ -423,7 +370,6 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                     pass
                 
                 logger.info(f"Final result: {len(jobs_dict)} jobs")
-                print(f"🎉 FRONTEND: Search completed! Final result: {len(jobs_dict)} jobs")
                 
                 return jobs_dict
                 
@@ -438,10 +384,6 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
     except Exception as e:
         error_msg = f"Error searching for jobs: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        print(f"❌ FRONTEND ERROR: {error_msg}")
-        import traceback
-        print("Full traceback:")
-        traceback.print_exc()
         st.error(error_msg)
         return []
 
