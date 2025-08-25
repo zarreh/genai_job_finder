@@ -33,8 +33,8 @@ class CleanerConfig:
     - Entry level, Junior, Senior, etc.
     
     If no specific years are mentioned, infer from job level keywords:
-    - Intern/Internship: 0 years
-    - Entry level/Junior: 0-1 years
+    - Entry level: 0 years
+    - Junior: 0-1 years
     - Associate/Early career: 1-3 years
     - Mid-level: 3-5 years
     - Senior: 5-8 years
@@ -96,14 +96,13 @@ class CleanerConfig:
     # Employment type validation prompt
     employment_type_validation_prompt: str = """
     Analyze the following job description and determine the employment type.
-    The employment type should be one of: Full-time, Part-time, Contract, Internship, Temporary
+    The employment type should be one of: Full-time, Part-time, Contract, Internship
     
     Look for keywords like:
     - Full-time: "full time", "40 hours", "permanent", "salaried"
     - Part-time: "part time", "20 hours", "flexible hours"
     - Contract: "contract", "contractor", "freelance", "consulting"
     - Internship: "intern", "internship", "student position"
-    - Temporary: "temporary", "temp", "seasonal", "short-term"
     
     Current classification: {current_type}
     
@@ -111,7 +110,7 @@ class CleanerConfig:
     {content}
     
     Based on the job description, is the current classification correct?
-    Return only: Full-time, Part-time, Contract, Internship, or Temporary
+    Return only: Full-time, Part-time, Contract, or Internship
     
     Employment type:
     """

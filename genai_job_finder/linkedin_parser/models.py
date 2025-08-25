@@ -10,7 +10,6 @@ class JobType(Enum):
     PART_TIME = "Part-time"
     CONTRACT = "Contract"
     INTERNSHIP = "Internship"
-    TEMPORARY = "Temporary"
     OTHER = "Other"
 
 

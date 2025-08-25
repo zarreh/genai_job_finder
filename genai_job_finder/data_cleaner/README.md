@@ -126,8 +126,8 @@ Total records processed: 3
 
 Experience Level Distribution:
   Senior: 1
-  Intern: 1  
-  Entry / Junior: 1
+  Entry level: 1  
+  Junior: 1
 
 Corrections Made:
   Location Type: 3 records

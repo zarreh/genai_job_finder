@@ -19,8 +19,6 @@ def map_to_employment_type(type_str: str) -> EmploymentType:
         return EmploymentType.CONTRACT
     elif "intern" in type_lower:
         return EmploymentType.INTERNSHIP
-    elif "temp" in type_lower:
-        return EmploymentType.TEMPORARY
     else:
         return EmploymentType.UNKNOWN
 

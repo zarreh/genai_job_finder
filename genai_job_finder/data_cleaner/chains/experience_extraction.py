@@ -19,13 +19,13 @@ Look for phrases like:
 - Entry level, Junior, Senior, etc.
 
 If no specific years are mentioned, infer from job level keywords:
-- Intern/Internship: 0 years
-- Entry level/Junior: 0-1 years
-- Associate/Early career: 1-3 years
-- Mid-level: 3-5 years
-- Senior: 5-8 years
-- Staff/Principal/Lead: 8-12 years
-- Director/VP/Executive: 12+ years
+- Entry level: 0 years
+- Junior: 1 years
+- Associate/Early career: 2-3 years
+- Mid-level: 4-5 years
+- Senior: 6-8 years
+- Staff/Principal/Lead: 9-12 years
+- Director/VP/Executive: 13+ years
 
 Return only the minimum number of years as an integer. If unclear, return -1.
 
@@ -98,17 +98,19 @@ class ExperienceExtractionChain:
         # Check for level-based keywords
         if any(keyword in content_lower for keyword in ["intern", "internship", "student", "trainee"]):
             return 0
-        elif any(keyword in content_lower for keyword in ["entry", "junior", "graduate", "new grad", "beginner"]):
+        elif any(keyword in content_lower for keyword in ["entry", "entry level", "entry-level", "graduate", "new grad", "beginner"]):
             return 0
-        elif any(keyword in content_lower for keyword in ["associate", "early career", "1-3 years"]):
+        elif any(keyword in content_lower for keyword in ["junior", "jr."]):
+            return 1
+        elif any(keyword in content_lower for keyword in ["associate", "early career", "2-3 years"]):
             return 2
-        elif any(keyword in content_lower for keyword in ["mid-level", "mid level", "intermediate", "3-5 years"]):
+        elif any(keyword in content_lower for keyword in ["mid-level", "mid level", "intermediate", "4-5 years"]):
             return 4
-        elif any(keyword in content_lower for keyword in ["senior", "sr.", "experienced", "5-8 years"]):
+        elif any(keyword in content_lower for keyword in ["senior", "sr.", "experienced", "6-8 years"]):
             return 6
-        elif any(keyword in content_lower for keyword in ["staff", "principal", "lead", "8-12 years"]):
+        elif any(keyword in content_lower for keyword in ["staff", "principal", "lead", "9-12 years"]):
             return 10
-        elif any(keyword in content_lower for keyword in ["director", "vp", "executive", "manager", "12+ years"]):
+        elif any(keyword in content_lower for keyword in ["director", "vp", "executive", "manager", "13+ years"]):
             return 15
         
         return -1

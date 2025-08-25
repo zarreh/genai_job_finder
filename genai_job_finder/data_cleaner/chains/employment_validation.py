@@ -9,14 +9,13 @@ from ..llm import get_llm
 
 EMPLOYMENT_VALIDATION_PROMPT = """
 Analyze the following job description and determine the employment type.
-The employment type should be one of: Full-time, Part-time, Contract, Internship, Temporary
+The employment type should be one of: Full-time, Part-time, Contract, Internship
 
 Look for keywords like:
 - Full-time: "full time", "40 hours", "permanent", "salaried"
 - Part-time: "part time", "20 hours", "flexible hours"
 - Contract: "contract", "contractor", "freelance", "consulting"
 - Internship: "intern", "internship", "student position"
-- Temporary: "temporary", "temp", "seasonal", "short-term"
 
 Current classification: {current_type}
 
@@ -24,7 +23,7 @@ Job Description:
 {content}
 
 Based on the job description, is the current classification correct?
-Return only: Full-time, Part-time, Contract, Internship, or Temporary
+Return only: Full-time, Part-time, Contract, or Internship
 
 Employment type:
 """
@@ -45,8 +44,6 @@ class EmploymentTypeOutputParser(BaseOutputParser):
             return EmploymentType.CONTRACT
         elif "internship" in text_lower or "intern" in text_lower:
             return EmploymentType.INTERNSHIP
-        elif "temporary" in text_lower or "temp" in text_lower:
-            return EmploymentType.TEMPORARY
         else:
             return EmploymentType.UNKNOWN
 
@@ -95,8 +92,6 @@ class EmploymentValidationChain:
             return EmploymentType.CONTRACT
         elif any(keyword in content_lower for keyword in ["intern", "internship", "student"]):
             return EmploymentType.INTERNSHIP
-        elif any(keyword in content_lower for keyword in ["temporary", "temp", "seasonal"]):
-            return EmploymentType.TEMPORARY
         else:
             return EmploymentType.UNKNOWN
 
@@ -113,8 +108,7 @@ if __name__ == "__main__":
             ("This is a full-time permanent position", "Part-time"),
             ("Looking for part-time help, 20 hours per week", "Full-time"),
             ("Contract role for 6 months", "Full-time"),
-            ("Summer internship program for students", "Full-time"),
-            ("Temporary seasonal position during holidays", "Full-time")
+            ("Summer internship program for students", "Full-time")
         ]
         
         for i, (content, current_type) in enumerate(test_cases, 1):

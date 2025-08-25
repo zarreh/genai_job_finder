@@ -9,23 +9,23 @@ from typing import Optional, Dict, Any
 
 class ExperienceLevel(Enum):
     """Classification of job experience levels based on years of experience."""
-    INTERN = 0
-    ENTRY_JUNIOR = 1  # 0-1 years
-    EARLY_CAREER_ASSOCIATE = 2  # 1-3 years
-    MID = 3  # 3-5 years
-    SENIOR = 4  # 5-8 years
-    STAFF_PRINCIPAL = 5  # 8-12 years
-    DIRECTOR_EXECUTIVE = 6  # 12+ years
+    ENTRY_LEVEL = 0  # 0 years (entry level)
+    JUNIOR = 1  # 1 year (junior)
+    ASSOCIATE = 2  # 2-3 years
+    MID = 3  # 4-5 years
+    SENIOR = 4  # 6-8 years
+    STAFF_PRINCIPAL = 5  # 9-12 years
+    DIRECTOR_EXECUTIVE = 6  # 13+ years
     
     @classmethod
     def from_years(cls, years: int) -> 'ExperienceLevel':
         """Classify experience level based on years of experience."""
         if years == 0:
-            return cls.INTERN
-        elif years <= 1:
-            return cls.ENTRY_JUNIOR
+            return cls.ENTRY_LEVEL
+        elif years == 1:
+            return cls.JUNIOR
         elif years <= 3:
-            return cls.EARLY_CAREER_ASSOCIATE
+            return cls.ASSOCIATE
         elif years <= 5:
             return cls.MID
         elif years <= 8:
@@ -38,13 +38,13 @@ class ExperienceLevel(Enum):
     def get_label(self) -> str:
         """Get human-readable label for the experience level."""
         labels = {
-            self.INTERN: "Intern",
-            self.ENTRY_JUNIOR: "Entry / Junior",
-            self.EARLY_CAREER_ASSOCIATE: "Early-career / Associate", 
-            self.MID: "Mid",
+            self.ENTRY_LEVEL: "Entry level",
+            self.JUNIOR: "Junior",
+            self.ASSOCIATE: "Associate/Early career", 
+            self.MID: "Mid-level",
             self.SENIOR: "Senior",
-            self.STAFF_PRINCIPAL: "Staff / Principal",
-            self.DIRECTOR_EXECUTIVE: "Director / Executive"
+            self.STAFF_PRINCIPAL: "Staff/Principal/Lead",
+            self.DIRECTOR_EXECUTIVE: "Director/VP/Executive"
         }
         return labels[self]
 
@@ -63,7 +63,6 @@ class EmploymentType(Enum):
     PART_TIME = "Part-time"
     CONTRACT = "Contract"
     INTERNSHIP = "Internship"
-    TEMPORARY = "Temporary"
     UNKNOWN = "Unknown"
 
 

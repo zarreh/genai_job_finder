@@ -12,13 +12,13 @@ def test_experience_level_classification():
     from genai_job_finder.data_cleaner.models import ExperienceLevel
     
     test_cases = [
-        (0, ExperienceLevel.INTERN, "Intern"),
-        (1, ExperienceLevel.ENTRY_JUNIOR, "Entry / Junior"),
-        (2, ExperienceLevel.EARLY_CAREER_ASSOCIATE, "Early-career / Associate"),
-        (4, ExperienceLevel.MID, "Mid"),
+        (0, ExperienceLevel.ENTRY_LEVEL, "Entry level"),
+        (1, ExperienceLevel.JUNIOR, "Junior"),
+        (2, ExperienceLevel.ASSOCIATE, "Associate/Early career"),
+        (4, ExperienceLevel.MID, "Mid-level"),
         (6, ExperienceLevel.SENIOR, "Senior"),
-        (10, ExperienceLevel.STAFF_PRINCIPAL, "Staff / Principal"),
-        (15, ExperienceLevel.DIRECTOR_EXECUTIVE, "Director / Executive"),
+        (10, ExperienceLevel.STAFF_PRINCIPAL, "Staff/Principal/Lead"),
+        (15, ExperienceLevel.DIRECTOR_EXECUTIVE, "Director/VP/Executive"),
     ]
     
     for years, expected_level, expected_label in test_cases:
