@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import math
 import time
+import asyncio
+import subprocess
+import sqlite3
+import json
 from bs4 import BeautifulSoup
 
 # Add the parent directory to the path so we can import from genai_job_finder
@@ -15,6 +19,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from genai_job_finder.linkedin_parser.parser import LinkedInJobParser
 from genai_job_finder.linkedin_parser.database import DatabaseManager
 from genai_job_finder.linkedin_parser.models import Job, JobType, ExperienceLevel
+from genai_job_finder.data_cleaner.graph import JobCleaningGraph
+from genai_job_finder.data_cleaner.config import CleanerConfig
 
 # Configure logging to show in terminal
 logging.basicConfig(
@@ -41,6 +47,8 @@ if 'jobs' not in st.session_state:
     st.session_state.jobs = []
 if 'stored_jobs' not in st.session_state:
     st.session_state.stored_jobs = []
+if 'cleaned_jobs' not in st.session_state:
+    st.session_state.cleaned_jobs = []
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 1
 if 'search_performed' not in st.session_state:
@@ -53,6 +61,10 @@ if 'selected_job' not in st.session_state:
     st.session_state.selected_job = None
 if 'show_job_details' not in st.session_state:
     st.session_state.show_job_details = False
+if 'use_cleaned_data' not in st.session_state:
+    st.session_state.use_cleaned_data = False
+if 'cleaning_in_progress' not in st.session_state:
+    st.session_state.cleaning_in_progress = False
 
 def get_time_filter_options():
     """Get time filter options for job posting dates"""
@@ -88,6 +100,73 @@ def load_jobs_from_database() -> List[dict]:
         logger.error(f"Error loading jobs from database: {e}")
         return []
 
+def load_cleaned_jobs_from_database() -> List[dict]:
+    """Load all cleaned jobs from the database"""
+    try:
+        # Use the main database in data/ folder
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "jobs.db")
+        
+        if not os.path.exists(db_path):
+            logger.warning(f"Database not found at {db_path}")
+            return []
+        
+        import sqlite3
+        with sqlite3.connect(db_path) as conn:
+            # Check if cleaned_jobs table exists
+            tables_query = "SELECT name FROM sqlite_master WHERE type='table' AND name='cleaned_jobs'"
+            tables_df = pd.read_sql_query(tables_query, conn)
+            
+            if tables_df.empty:
+                logger.warning("No cleaned_jobs table found")
+                return []
+            
+            # Load cleaned jobs
+            query = "SELECT * FROM cleaned_jobs ORDER BY created_at DESC"
+            df = pd.read_sql_query(query, conn)
+            
+            if df.empty:
+                return []
+            
+            # Convert DataFrame to list of dictionaries
+            jobs = df.to_dict('records')
+            logger.info(f"Loaded {len(jobs)} cleaned jobs from database")
+            return jobs
+        
+    except Exception as e:
+        logger.error(f"Error loading cleaned jobs from database: {e}")
+        return []
+
+def run_data_cleaner(db_path: str) -> bool:
+    """Run the data cleaner on the database"""
+    try:
+        logger.info("Starting data cleaner...")
+        
+        # Setup cleaner config
+        config = CleanerConfig(
+            ollama_model="llama3.2",
+            ollama_base_url="http://localhost:11434"
+        )
+        
+        # Initialize and run the cleaning graph
+        graph = JobCleaningGraph(config)
+        
+        # Run asynchronously
+        async def clean_data():
+            await graph.process_database_table(db_path, "jobs", "cleaned_jobs")
+        
+        # Use asyncio to run the cleaning
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(clean_data())
+        loop.close()
+        
+        logger.info("Data cleaning completed successfully!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error during data cleaning: {e}")
+        return False
+
 def get_recent_runs_from_database() -> List[dict]:
     """Get recent job runs from database"""
     try:
@@ -108,6 +187,9 @@ def display_job_details(job_data: dict):
     """Display detailed view of a selected job"""
     st.header("📋 Job Details")
     
+    # Check if this is cleaned data
+    is_cleaned = 'experience_level_label' in job_data
+    
     # Back button
     col1, col2 = st.columns([1, 4])
     with col1:
@@ -116,27 +198,78 @@ def display_job_details(job_data: dict):
             st.session_state.selected_job = None
             st.rerun()
     
+    with col2:
+        if is_cleaned:
+            st.success("🤖 AI-Enhanced Job Data")
+        else:
+            st.info("📊 Original Job Data")
+    
     # Job header
     st.subheader(f"🎯 {job_data.get('title', 'N/A')}")
     st.markdown(f"**🏢 Company:** {job_data.get('company', 'N/A')}")
     
     # Key information in columns
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("📍 Location", job_data.get('location', 'N/A'))
-        st.metric("💼 Employment Type", job_data.get('employment_type', 'N/A'))
-        st.metric("📊 Level", job_data.get('level', 'N/A'))
-    
-    with col2:
-        st.metric("🏠 Work Location Type", job_data.get('work_location_type', 'N/A'))
-        st.metric("💰 Salary Range", job_data.get('salary_range', 'N/A') if job_data.get('salary_range') else 'Not specified')
-        st.metric("⏰ Posted", job_data.get('posted_time', 'N/A'))
-    
-    with col3:
-        st.metric("👥 Applicants", job_data.get('applicants', 'N/A'))
-        st.metric("🔧 Job Function", job_data.get('job_function', 'N/A'))
-        st.metric("🏭 Industries", job_data.get('industries', 'N/A'))
+    if is_cleaned:
+        # Enhanced view for cleaned data
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("📍 Location", job_data.get('location', 'N/A'))
+            st.metric("💼 Employment Type", job_data.get('employment_type', 'N/A'))
+            st.metric("🎯 Experience Level", job_data.get('experience_level_label', 'N/A'))
+            st.metric("📅 Years Required", str(job_data.get('min_years_experience', 'N/A')))
+        
+        with col2:
+            st.metric("🏠 Work Location Type", job_data.get('work_location_type', 'N/A'))
+            
+            # Handle salary display with proper NaN checking
+            import pandas as pd
+            min_sal = job_data.get('min_salary')
+            max_sal = job_data.get('max_salary')
+            mid_sal = job_data.get('mid_salary')
+            
+            if (min_sal is not None and max_sal is not None and 
+                not pd.isna(min_sal) and not pd.isna(max_sal) and
+                min_sal > 0 and max_sal > 0):
+                st.metric("💰 Salary Range", f"${min_sal:,.0f} - ${max_sal:,.0f}")
+                if mid_sal is not None and not pd.isna(mid_sal) and mid_sal > 0:
+                    st.metric("💵 Mid Salary", f"${mid_sal:,.0f}")
+                else:
+                    st.metric("💵 Mid Salary", "N/A")
+                st.metric("💱 Currency", job_data.get('salary_currency', 'N/A'))
+            else:
+                st.metric("💰 Salary Range", job_data.get('salary_range', 'Not specified'))
+            
+        with col3:
+            st.metric("⏰ Posted", job_data.get('posted_time', 'N/A'))
+            st.metric("👥 Applicants", job_data.get('applicants', 'N/A'))
+            st.metric("🔧 Job Function", job_data.get('job_function', 'N/A'))
+            st.metric("🏭 Industries", job_data.get('industries', 'N/A'))
+            
+        # AI Processing status
+        if job_data.get('processing_complete'):
+            st.success("✅ AI Processing Complete")
+        if job_data.get('processing_errors'):
+            st.warning(f"⚠️ Processing Errors: {job_data.get('processing_errors')}")
+            
+    else:
+        # Original view for raw data
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("📍 Location", job_data.get('location', 'N/A'))
+            st.metric("💼 Employment Type", job_data.get('employment_type', 'N/A'))
+            st.metric("📊 Level", job_data.get('level', 'N/A'))
+        
+        with col2:
+            st.metric("🏠 Work Location Type", job_data.get('work_location_type', 'N/A'))
+            st.metric("💰 Salary Range", job_data.get('salary_range', 'N/A') if job_data.get('salary_range') else 'Not specified')
+            st.metric("⏰ Posted", job_data.get('posted_time', 'N/A'))
+        
+        with col3:
+            st.metric("👥 Applicants", job_data.get('applicants', 'N/A'))
+            st.metric("🔧 Job Function", job_data.get('job_function', 'N/A'))
+            st.metric("🏭 Industries", job_data.get('industries', 'N/A'))
     
     # LinkedIn link
     if job_data.get('job_posting_link'):
@@ -145,6 +278,9 @@ def display_job_details(job_data: dict):
     # Date parsed
     if job_data.get('date'):
         st.caption(f"📅 Parsed on: {job_data.get('date')}")
+    
+    if is_cleaned and job_data.get('updated_at'):
+        st.caption(f"🤖 AI Enhanced on: {job_data.get('updated_at')}")
     
     st.divider()
     
@@ -182,6 +318,36 @@ def display_job_details(job_data: dict):
             st.markdown(f"**Parsing Source:** [LinkedIn API]({job_data.get('parsing_link')})")
         if job_data.get('run_id'):
             st.text(f"Parser Run ID: {job_data.get('run_id')}")
+            
+    # Show AI enhancement details for cleaned data
+    if is_cleaned:
+        st.subheader("🤖 AI Enhancement Details")
+        enhancement_cols = st.columns(4)
+        
+        with enhancement_cols[0]:
+            if job_data.get('salary_corrected'):
+                st.success("💰 Salary Enhanced")
+            else:
+                st.info("💰 Salary Original")
+                
+        with enhancement_cols[1]:
+            if job_data.get('location_corrected'):
+                st.success("📍 Location Enhanced")
+            else:
+                st.info("📍 Location Original")
+                
+        with enhancement_cols[2]:
+            if job_data.get('employment_corrected'):
+                st.success("💼 Employment Enhanced")
+            else:
+                st.info("💼 Employment Original")
+                
+        with enhancement_cols[3]:
+            exp_level = job_data.get('experience_level', 0)
+            if exp_level > 0:
+                st.success(f"🎯 Experience: Level {exp_level}")
+            else:
+                st.info("🎯 Experience: Not classified")
 
 def find_job_by_id(job_id: str, jobs_data: List[dict]) -> Optional[dict]:
     """Find a job by its ID in the jobs data"""
@@ -194,25 +360,68 @@ def find_job_by_id(job_id: str, jobs_data: List[dict]) -> Optional[dict]:
                 return job.to_dict() if hasattr(job, 'to_dict') else job.__dict__
     return None
 
-def format_job_for_display(job_data: dict) -> dict:
+def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
     """Format job data for display in table - supports both Job objects and dict data"""
     # Handle both Job objects and dictionary data
     if isinstance(job_data, dict):
-        # Data from database (dictionary format)
-        return {
-            "Company": job_data.get("company", "N/A"),
-            "Title": job_data.get("title", "N/A"),
-            "Location": job_data.get("location", "N/A"),
-            "Work Location Type": job_data.get("work_location_type", "N/A"),
-            "Level": job_data.get("level", "N/A"),
-            "Salary Range": job_data.get("salary_range", "N/A"),
-            "Employment Type": job_data.get("employment_type", "N/A"),
-            "Job Function": job_data.get("job_function", "N/A"),
-            "Industries": job_data.get("industries", "N/A"),
-            "Posted Time": job_data.get("posted_time", "N/A"),
-            "Applicants": job_data.get("applicants", "N/A"),
-            "Job ID": job_data.get("id", "N/A")  # Keep ID for selection
-        }
+        if is_cleaned:
+            # Enhanced cleaned data format with AI-enhanced fields
+            
+            # Handle salary formatting with proper NaN checking
+            min_sal = job_data.get('min_salary')
+            max_sal = job_data.get('max_salary')
+            mid_sal = job_data.get('mid_salary')
+            
+            # Check if salary values are valid numbers (not None, not NaN)
+            import pandas as pd
+            if (min_sal is not None and max_sal is not None and 
+                not pd.isna(min_sal) and not pd.isna(max_sal) and
+                min_sal > 0 and max_sal > 0):
+                if mid_sal and not pd.isna(mid_sal) and mid_sal > 0:
+                    salary_display = f"${min_sal:,.0f} - ${max_sal:,.0f} (Mid: ${mid_sal:,.0f})"
+                else:
+                    salary_display = f"${min_sal:,.0f} - ${max_sal:,.0f}"
+            else:
+                salary_display = job_data.get("salary_range", "N/A")
+            
+            # Use enhanced fields from cleaned_jobs table
+            experience_level = job_data.get("experience_level_label", "N/A")
+            years_exp = job_data.get("min_years_experience")
+            if years_exp is None or pd.isna(years_exp):
+                years_exp = "N/A"
+            
+            base_format = {
+                "Company": job_data.get("company", "N/A"),
+                "Title": job_data.get("title", "N/A"),
+                "Location": job_data.get("location", "N/A"),
+                "Work Location Type": job_data.get("work_location_type", "N/A"),
+                "Experience Level": experience_level,
+                "Years Experience": years_exp,
+                "Salary Range": salary_display,
+                "Employment Type": job_data.get("employment_type", "N/A"),
+                "Job Function": job_data.get("job_function", "N/A"),
+                "Industries": job_data.get("industries", "N/A"),
+                "Posted Time": job_data.get("posted_time", "N/A"),
+                "Applicants": job_data.get("applicants", "N/A"),
+                "Job ID": job_data.get("id") or job_data.get("job_id", "N/A")  # Keep ID for selection
+            }
+            return base_format
+        else:
+            # Data from database (dictionary format) - original
+            return {
+                "Company": job_data.get("company", "N/A"),
+                "Title": job_data.get("title", "N/A"),
+                "Location": job_data.get("location", "N/A"),
+                "Work Location Type": job_data.get("work_location_type", "N/A"),
+                "Level": job_data.get("level", "N/A"),
+                "Salary Range": job_data.get("salary_range", "N/A"),
+                "Employment Type": job_data.get("employment_type", "N/A"),
+                "Job Function": job_data.get("job_function", "N/A"),
+                "Industries": job_data.get("industries", "N/A"),
+                "Posted Time": job_data.get("posted_time", "N/A"),
+                "Applicants": job_data.get("applicants", "N/A"),
+                "Job ID": job_data.get("id", "N/A")  # Keep ID for selection
+            }
     else:
         # Job object format (for backwards compatibility)
         return {
@@ -359,9 +568,110 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                     logger.info(f"After time filtering: {len(filtered_jobs)} jobs remain")
                     jobs_dict = filtered_jobs
                 
-                # Step 8: Complete
+                # Step 8: AI Enhancement with Data Cleaner
+                if jobs_dict:
+                    with status_placeholder.container():
+                        st.info(f"🤖 Enhancing {len(jobs_dict)} jobs with AI analysis...")
+                    
+                    logger.info("Starting AI enhancement with data cleaner...")
+                    
+                    try:
+                        # Run data cleaner on the temporary database
+                        config = CleanerConfig(
+                            ollama_model="llama3.2",
+                            ollama_base_url="http://localhost:11434"
+                        )
+                        graph = JobCleaningGraph(config)
+                        
+                        # Process the jobs through the AI cleaning pipeline
+                        import asyncio
+                        try:
+                            logger.info(f"Processing {len(jobs_dict)} jobs with AI enhancement...")
+                            with status_placeholder.container():
+                                st.info("🔧 Running AI data enhancement pipeline...")
+                            
+                            # Run the async process_database_table in a new event loop
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            loop.run_until_complete(graph.process_database_table(temp_db.name, "jobs", "cleaned_jobs"))
+                            loop.close()
+                            logger.info("AI enhancement completed successfully")
+                        except RuntimeError as re:
+                            # If we're already in an event loop, use run_data_cleaner instead
+                            logger.info(f"AsyncIO RuntimeError: {re}, using synchronous data cleaner approach...")
+                            with status_placeholder.container():
+                                st.info("🔧 Using alternative AI enhancement method...")
+                            success = run_data_cleaner(temp_db.name)
+                            if not success:
+                                raise Exception("Data cleaner failed")
+                        except Exception as e:
+                            logger.error(f"AI enhancement error: {e}")
+                            raise Exception(f"AI enhancement failed: {e}")
+                        
+                        with status_placeholder.container():
+                            st.info("🔄 Loading AI-enhanced job data...")
+                        
+                        # Reload the enhanced jobs from database
+                        enhanced_jobs = []
+                        try:
+                            
+                            conn = sqlite3.connect(temp_db.name)
+                            cursor = conn.cursor()
+                            
+                            # Check if cleaned_jobs table exists and has data
+                            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cleaned_jobs'")
+                            if cursor.fetchone():
+                                # Get all cleaned jobs
+                                cursor.execute("SELECT * FROM cleaned_jobs ORDER BY created_at DESC")
+                                rows = cursor.fetchall()
+                                columns = [description[0] for description in cursor.description]
+                                
+                                logger.info(f"Found {len(rows)} rows in cleaned_jobs table")
+                                logger.info(f"Cleaned jobs columns: {columns}")
+                                
+                                for row in rows:
+                                    job_data = dict(zip(columns, row))
+                                    
+                                    # Convert any JSON strings back to lists/objects
+                                    for field in ['required_skills', 'preferred_skills', 'education_requirements']:
+                                        if job_data.get(field):
+                                            try:
+                                                job_data[field] = json.loads(job_data[field])
+                                            except:
+                                                pass
+                                    
+                                    enhanced_jobs.append(job_data)
+                                    
+                                # Log sample of enhanced data
+                                if enhanced_jobs:
+                                    sample_job = enhanced_jobs[0]
+                                    logger.info(f"Sample enhanced job data: experience_level_label={sample_job.get('experience_level_label')}, min_years_experience={sample_job.get('min_years_experience')}, min_salary={sample_job.get('min_salary')}")
+                            else:
+                                logger.warning("No cleaned_jobs table found, using original data")
+                            
+                            conn.close()
+                            
+                            if enhanced_jobs:
+                                jobs_dict = enhanced_jobs
+                                logger.info(f"Successfully enhanced {len(enhanced_jobs)} jobs with AI")
+                            else:
+                                logger.warning("No enhanced jobs returned, using original data")
+                        
+                        except Exception as db_error:
+                            logger.warning(f"Failed to load enhanced jobs: {db_error}, using original data")
+                    
+                    except Exception as cleaning_error:
+                        logger.warning(f"AI enhancement failed: {cleaning_error}, proceeding with original data")
+                        with status_placeholder.container():
+                            st.warning("⚠️ AI enhancement failed, showing original job data")
+                        time.sleep(2)
+                
+                # Step 9: Complete
+                ai_enhanced_count = sum(1 for job in jobs_dict if job.get('experience_level_label') or job.get('min_salary') or job.get('processed_at'))
+                enhanced_msg = f" ({ai_enhanced_count} AI-enhanced)" if ai_enhanced_count > 0 else ""
+                
                 with status_placeholder.container():
-                    st.success(f"🎉 Search completed! Found {len(jobs_dict)} jobs ready to view.")
+                    st.success(f"🎉 Search completed! Found {len(jobs_dict)} jobs{enhanced_msg} ready to view.")
                 
                 # Clean up temporary database
                 try:
@@ -369,7 +679,7 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                 except:
                     pass
                 
-                logger.info(f"Final result: {len(jobs_dict)} jobs")
+                logger.info(f"Final result: {len(jobs_dict)} jobs with {ai_enhanced_count} AI-enhanced")
                 
                 return jobs_dict
                 
@@ -397,11 +707,11 @@ def main():
         return
     
     # Create tabs
-    tab1, tab2, tab3 = st.tabs(["🔍 Live Job Search", "📊 Stored Jobs", "📈 Search History"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Live Job Search", "📊 Stored Jobs", "🤖 AI-Enhanced Jobs", "📈 Search History"])
     
     with tab1:
-        st.header("Live Job Search")
-        st.info("⚠️ This performs live LinkedIn scraping and may take time. Results are not saved to database.")
+        st.header("Live Job Search with AI Enhancement")
+        st.info("⚠️ This performs live LinkedIn scraping with automatic AI enhancement. Results include enhanced data but are not saved to database.")
         
         # Search form
         with st.form("job_search_form"):
@@ -471,7 +781,10 @@ def main():
         
         # Display results
         if st.session_state.search_performed and st.session_state.jobs:
-            display_job_results(st.session_state.jobs, "Live Search Results")
+            # Check if any jobs have AI enhancement indicators
+            ai_enhanced_count = sum(1 for job in st.session_state.jobs if job.get('experience_level_label') or job.get('min_salary') or job.get('processed_at'))
+            title_suffix = f" - {ai_enhanced_count} AI Enhanced" if ai_enhanced_count > 0 else ""
+            display_job_results(st.session_state.jobs, f"Live Search Results{title_suffix}", is_cleaned_data=True)
     
     with tab2:
         st.header("Stored Jobs")
@@ -502,6 +815,68 @@ def main():
             st.info("No stored jobs available. Use the parser to collect job data first.")
     
     with tab3:
+        st.header("🤖 AI-Enhanced Jobs")
+        st.markdown("Jobs processed with AI-powered data cleaning and enhancement")
+        
+        # Load cleaned jobs button
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("🔄 Load AI-Enhanced Jobs", type="primary"):
+                st.session_state.cleaned_jobs = load_cleaned_jobs_from_database()
+                st.session_state.current_page = 1  # Reset to first page
+                
+                if st.session_state.cleaned_jobs:
+                    st.success(f"Loaded {len(st.session_state.cleaned_jobs)} AI-enhanced jobs!")
+                else:
+                    st.warning("No AI-enhanced jobs found. Use 'Live Job Search' tab to search and automatically enhance jobs.")
+        
+        with col2:
+            if st.button("🧹 Run Data Cleaner"):
+                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "jobs.db")
+                
+                if not os.path.exists(db_path):
+                    st.error("No database found. Please parse some jobs first.")
+                else:
+                    with st.spinner("🤖 Running AI data cleaner... This may take a few minutes."):
+                        success = run_data_cleaner(db_path)
+                        
+                    if success:
+                        st.success("✅ Data cleaning completed! Reload AI-enhanced jobs to see results.")
+                        # Auto-reload cleaned jobs
+                        st.session_state.cleaned_jobs = load_cleaned_jobs_from_database()
+                    else:
+                        st.error("❌ Data cleaning failed. Check logs for details.")
+        
+        # Auto-load cleaned jobs on first visit
+        if 'cleaned_jobs_loaded' not in st.session_state:
+            st.session_state.cleaned_jobs = load_cleaned_jobs_from_database()
+            st.session_state.cleaned_jobs_loaded = True
+        
+        # Show AI enhancement info
+        if st.session_state.cleaned_jobs:
+            st.info("✨ **AI Enhancements Include:** Experience level classification, Salary extraction & normalization, Work location validation, Employment type standardization")
+            
+            # Show enhanced fields comparison
+            with st.expander("🤖 AI Enhancement Details"):
+                st.markdown("""
+                **Enhanced Fields:**
+                - **Experience Level**: AI classifies as Intern, Junior, Mid-level, Senior, Lead, Principal, Director
+                - **Years Experience**: Extracts required years from job descriptions
+                - **Salary Range**: Parses and normalizes salary information (min, max, mid, currency, period)
+                - **Work Location Type**: Validates and corrects Remote/Hybrid/On-site classification
+                - **Employment Type**: Standardizes Full-time/Part-time/Contract classifications
+                
+                **Data Quality Flags:**
+                - Shows which fields were AI-enhanced vs original
+                - Processing completion status
+                - Error tracking for transparency
+                """)
+            
+            display_job_results(st.session_state.cleaned_jobs, "AI-Enhanced Jobs", is_cleaned_data=True)
+        else:
+            st.info("No AI-enhanced jobs available. Use 'Live Job Search' to automatically enhance new job data.")
+    
+    with tab4:
         st.header("Search History")
         
         # Load and display recent runs
@@ -527,7 +902,7 @@ def main():
         else:
             st.info("No search history available. Run the parser to see history.")
 
-def display_job_results(jobs_data: List, title: str, is_database_data: bool = False):
+def display_job_results(jobs_data: List, title: str, is_database_data: bool = False, is_cleaned_data: bool = False):
     """Display job results with pagination and filtering"""
     st.divider()
     st.header(title)
@@ -578,15 +953,24 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
     current_page_jobs = jobs_data[start_idx:end_idx]
     
     # Convert jobs to DataFrame for display - only specified columns
-    job_data = [format_job_for_display(job) for job in current_page_jobs]
+    job_data = [format_job_for_display(job, is_cleaned=is_cleaned_data) for job in current_page_jobs]
     df = pd.DataFrame(job_data)
     
-    # Filter to only show requested columns (removed content and date)
-    display_columns = [
-        "Company", "Title", "Location", "Work Location Type", "Level", 
-        "Salary Range", "Employment Type", "Job Function", 
-        "Industries", "Posted Time", "Applicants"
-    ]
+    # Filter to only show requested columns
+    if is_cleaned_data:
+        # Enhanced display columns for cleaned data
+        display_columns = [
+            "Company", "Title", "Location", "Work Location Type", "Experience Level", 
+            "Years Experience", "Salary Range", "Employment Type", "Job Function", 
+            "Industries", "Posted Time", "Applicants"
+        ]
+    else:
+        # Original display columns
+        display_columns = [
+            "Company", "Title", "Location", "Work Location Type", "Level", 
+            "Salary Range", "Employment Type", "Job Function", 
+            "Industries", "Posted Time", "Applicants"
+        ]
     
     # Only include columns that exist in the dataframe
     available_columns = [col for col in display_columns if col in df.columns]
@@ -596,19 +980,45 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
         
         # Add column filters
         st.subheader("Filter Results")
-        filter_cols = st.columns(4)
-        
-        # Create filters for key columns
-        with filter_cols[0]:
-            title_filter = st.text_input("Filter by Title", placeholder="e.g., Engineer, Data", key=f"title_filter_{title.replace(' ', '_')}")
-        with filter_cols[1]:
-            company_filter = st.text_input("Filter by Company", placeholder="e.g., Google, Meta", key=f"company_filter_{title.replace(' ', '_')}")
-        with filter_cols[2]:
-            location_filter = st.text_input("Filter by Location", placeholder="e.g., SF, Remote", key=f"location_filter_{title.replace(' ', '_')}")
-        with filter_cols[3]:
-            work_type_filter = st.selectbox("Filter by Work Type", 
-                                         options=["All"] + filtered_df["Work Location Type"].unique().tolist() if "Work Location Type" in filtered_df.columns else ["All"],
-                                         key=f"work_type_filter_{title.replace(' ', '_')}")
+        if is_cleaned_data:
+            # Enhanced filters for cleaned data
+            filter_cols = st.columns(5)
+            
+            with filter_cols[0]:
+                title_filter = st.text_input("Filter by Title", placeholder="e.g., Engineer, Data", key=f"title_filter_{title.replace(' ', '_')}")
+            with filter_cols[1]:
+                company_filter = st.text_input("Filter by Company", placeholder="e.g., Google, Meta", key=f"company_filter_{title.replace(' ', '_')}")
+            with filter_cols[2]:
+                location_filter = st.text_input("Filter by Location", placeholder="e.g., SF, Remote", key=f"location_filter_{title.replace(' ', '_')}")
+            with filter_cols[3]:
+                work_type_filter = st.selectbox("Work Type", 
+                                             options=["All"] + filtered_df["Work Location Type"].unique().tolist() if "Work Location Type" in filtered_df.columns else ["All"],
+                                             key=f"work_type_filter_{title.replace(' ', '_')}")
+            with filter_cols[4]:
+                exp_level_filter = st.selectbox("Experience Level", 
+                                              options=["All"] + sorted(filtered_df["Experience Level"].unique().tolist()) if "Experience Level" in filtered_df.columns else ["All"],
+                                              key=f"exp_level_filter_{title.replace(' ', '_')}")
+            
+            # Salary range filter for cleaned data
+            salary_col1, salary_col2 = st.columns(2)
+            with salary_col1:
+                min_salary_filter = st.number_input("Min Salary ($)", min_value=0, value=0, step=10000, key=f"min_salary_{title.replace(' ', '_')}")
+            with salary_col2:
+                max_salary_filter = st.number_input("Max Salary ($)", min_value=0, value=0, step=10000, key=f"max_salary_{title.replace(' ', '_')}")
+        else:
+            # Original filters
+            filter_cols = st.columns(4)
+            
+            with filter_cols[0]:
+                title_filter = st.text_input("Filter by Title", placeholder="e.g., Engineer, Data", key=f"title_filter_{title.replace(' ', '_')}")
+            with filter_cols[1]:
+                company_filter = st.text_input("Filter by Company", placeholder="e.g., Google, Meta", key=f"company_filter_{title.replace(' ', '_')}")
+            with filter_cols[2]:
+                location_filter = st.text_input("Filter by Location", placeholder="e.g., SF, Remote", key=f"location_filter_{title.replace(' ', '_')}")
+            with filter_cols[3]:
+                work_type_filter = st.selectbox("Filter by Work Type", 
+                                             options=["All"] + filtered_df["Work Location Type"].unique().tolist() if "Work Location Type" in filtered_df.columns else ["All"],
+                                             key=f"work_type_filter_{title.replace(' ', '_')}")
         
         # Apply filters
         display_df = filtered_df.copy()
@@ -622,6 +1032,33 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
         if work_type_filter != "All":
             display_df = display_df[display_df["Work Location Type"] == work_type_filter]
         
+        # Additional filters for cleaned data
+        if is_cleaned_data:
+            if exp_level_filter != "All":
+                display_df = display_df[display_df["Experience Level"] == exp_level_filter]
+            
+            # Salary range filter
+            if min_salary_filter > 0 or max_salary_filter > 0:
+                # Extract salary values from the formatted range strings
+                def extract_min_salary(salary_str):
+                    if pd.isna(salary_str) or salary_str == "N/A":
+                        return 0
+                    import re
+                    match = re.search(r'\$([0-9,]+)', str(salary_str))
+                    if match:
+                        return int(match.group(1).replace(',', ''))
+                    return 0
+                
+                display_df['_min_salary_numeric'] = display_df["Salary Range"].apply(extract_min_salary)
+                
+                if min_salary_filter > 0:
+                    display_df = display_df[display_df['_min_salary_numeric'] >= min_salary_filter]
+                if max_salary_filter > 0:
+                    display_df = display_df[display_df['_min_salary_numeric'] <= max_salary_filter]
+                
+                # Remove the temporary column
+                display_df = display_df.drop('_min_salary_numeric', axis=1)
+        
         # Show filter results info
         if len(display_df) != len(filtered_df):
             st.info(f"Showing {len(display_df)} of {len(filtered_df)} jobs after filtering")
@@ -634,13 +1071,48 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
             display_with_index = display_df.reset_index(drop=True)
             
             # Display the dataframe with click handling
-            selected_indices = st.dataframe(
-                display_with_index,
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                column_config={
+            if is_cleaned_data:
+                # Enhanced column config for cleaned data
+                column_config = {
+                    "Title": st.column_config.TextColumn(
+                        "Title",
+                        help="Job title - Click row for details",
+                        width="large"
+                    ),
+                    "Company": st.column_config.TextColumn(
+                        "Company",
+                        help="Company name",
+                        width="medium"
+                    ),
+                    "Location": st.column_config.TextColumn(
+                        "Location",
+                        help="Job location",
+                        width="medium"
+                    ),
+                    "Work Location Type": st.column_config.TextColumn(
+                        "Work Type",
+                        help="Remote/Hybrid/On-site",
+                        width="small"
+                    ),
+                    "Experience Level": st.column_config.TextColumn(
+                        "Experience",
+                        help="AI-classified experience level",
+                        width="small"
+                    ),
+                    "Years Experience": st.column_config.NumberColumn(
+                        "Years",
+                        help="Required years of experience",
+                        width="small"
+                    ),
+                    "Salary Range": st.column_config.TextColumn(
+                        "Salary Range",
+                        help="AI-extracted salary information",
+                        width="medium"
+                    )
+                }
+            else:
+                # Original column config
+                column_config = {
                     "Title": st.column_config.TextColumn(
                         "Title",
                         help="Job title - Click row for details",
@@ -672,6 +1144,14 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
                         width="medium"
                     )
                 }
+            
+            selected_indices = st.dataframe(
+                display_with_index,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                column_config=column_config
             )
             
             # Handle row selection
@@ -702,25 +1182,22 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
         
         # Download option
         if st.button("📥 Download Results as CSV", key=f"download_{title.replace(' ', '_')}"):
-            all_job_data = [format_job_for_display(job) for job in jobs_data]
+            all_job_data = [format_job_for_display(job, is_cleaned=is_cleaned_data) for job in jobs_data]
             csv_df = pd.DataFrame(all_job_data)
             
-            # Filter to only requested columns (excluding content and date)
-            display_columns_for_csv = [
-                "Company", "Title", "Location", "Work Location Type", "Level", 
-                "Salary Range", "Employment Type", "Job Function", 
-                "Industries", "Posted Time", "Applicants"
-            ]
-            
+            # Filter to only requested columns for CSV
             if not csv_df.empty:
-                available_cols = [col for col in display_columns_for_csv if col in csv_df.columns]
+                available_cols = [col for col in display_columns if col in csv_df.columns]
                 csv_df = csv_df[available_cols]
             
             csv = csv_df.to_csv(index=False)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename_prefix = "ai_enhanced" if is_cleaned_data else "job_search"
+            
             st.download_button(
                 label="Click to Download",
                 data=csv,
-                file_name=f"job_search_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"{filename_prefix}_results_{timestamp}.csv",
                 mime="text/csv",
                 key=f"download_btn_{title.replace(' ', '_')}"
             )

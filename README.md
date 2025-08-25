@@ -5,13 +5,16 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 ## 🚀 Key Features
 
 - **🎯 Enhanced LinkedIn Job Scraping**: Completely rewritten parser with location intelligence
+- **🤖 AI-Powered Data Cleaning**: Advanced job data enhancement with experience analysis, salary extraction, and field validation
 - **📊 17-Column Data Structure**: Maintains exact legacy output format compatibility  
 - **🌍 Location Intelligence**: Automatic location extraction and work type classification (Remote/Hybrid/On-site)
+- **💰 Smart Salary Processing**: AI-powered salary range extraction and normalization
+- **🎓 Experience Classification**: Automatic experience level categorization (Entry level → Junior → Associate/Early career → Mid-level → Senior → Staff/Principal/Lead → Director/VP/Executive)
 - **🔧 Modular Architecture**: Clean, organized codebase with proper module structure
 - **⚡ Multiple Execution Methods**: Run as simple script, Python module, or programmatically
-- **🖥️ Enhanced Web Frontend**: Multi-tab Streamlit interface with live search, stored job browsing, and analytics
+- **🖥️ Enhanced Web Frontend**: Multi-tab Streamlit interface with AI-enhanced job browsing and complete parse & clean pipeline
 - **💾 Database Storage**: SQLite database with automatic migration support
-- **📤 CSV Export**: Export job data with all 17 columns including location intelligence
+- **📤 CSV Export**: Export job data with all enhanced fields
 - **🛠️ Easy Execution**: Comprehensive Makefile for simplified command execution
 - **📈 Progress Tracking**: Visual progress bars and detailed status reporting
 
@@ -20,6 +23,9 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 - **Python 3.12+**
 - **Poetry** (for dependency management)
 - **Internet connection** (for LinkedIn scraping)
+- **Ollama** (optional, for AI data cleaning features)
+  - Install from [ollama.ai](https://ollama.ai)
+  - Pull model: `ollama pull llama3.2`
 
 ## 🛠️ Installation
 
@@ -185,6 +191,108 @@ from genai_job_finder.linkedin_parser import run_parser
 run_parser()  # Uses default settings: "data scientist" in "San Antonio"
 ```
 
+## 🤖 AI-Powered Data Cleaning & Enhancement
+
+The system includes a comprehensive AI data cleaner that enhances raw job data with intelligent analysis and structured information extraction.
+
+### 🎯 AI Enhancement Features
+
+- **🎓 Experience Analysis**: Extracts minimum years of experience and classifies into 7 levels
+- **💰 Salary Intelligence**: Parses salary ranges with currency and period normalization  
+- **🏠 Location Validation**: Validates and corrects work location types (Remote/Hybrid/On-site)
+- **💼 Employment Type Standardization**: Validates Full-time/Part-time/Contract/Internship classifications
+
+### 📊 Experience Level Classification
+
+Jobs are automatically classified into 7 experience levels:
+
+| Level | Years | Label |
+|-------|-------|-------|
+| 0 | 0 years | Entry level |
+| 1 | 1 year | Junior |
+| 2 | 2-3 years | Associate/Early career |
+| 3 | 4-5 years | Mid-level |
+| 4 | 6-8 years | Senior |
+| 5 | 9-12 years | Staff/Principal/Lead |
+| 6 | 13+ years | Director/VP/Executive |
+
+### 🚀 AI Cleaner Usage
+
+#### Enhanced Frontend Pipeline
+Use the enhanced frontend for complete parse & clean workflow:
+
+```bash
+make run-enhanced-frontend
+```
+
+Features a **Parse & Clean** tab that:
+- Parses jobs from LinkedIn
+- Automatically applies AI enhancement
+- Shows real-time progress
+- Displays enhanced results immediately
+
+#### Command Line Interface
+```bash
+# Basic AI cleaning
+python -m genai_job_finder.data_cleaner.run_graph
+
+# With custom options
+python -m genai_job_finder.data_cleaner.run_graph \
+    --db-path data/jobs.db \
+    --model llama3.2 \
+    --verbose
+```
+
+#### Programmatic Usage
+```python
+from genai_job_finder.data_cleaner import JobDataCleaner
+
+# Initialize AI cleaner
+cleaner = JobDataCleaner()
+
+# Clean individual job
+enhanced_job = await cleaner.clean_job_data(job_data)
+
+# Process database jobs
+cleaner.process_database("data/jobs.db")
+```
+
+### 🧪 Individual Component Testing
+
+Test each AI component independently:
+
+```bash
+# Test experience extraction
+python -m genai_job_finder.data_cleaner.chains.experience_extraction
+
+# Test salary extraction  
+python -m genai_job_finder.data_cleaner.chains.salary_extraction
+
+# Test location validation
+python -m genai_job_finder.data_cleaner.chains.location_validation
+
+# Test employment validation
+python -m genai_job_finder.data_cleaner.chains.employment_validation
+```
+
+### 📈 Enhanced Output Fields
+
+The AI cleaner adds these fields to your job data:
+
+#### Experience Enhancement
+- `min_years_experience`: Required years (0-15+)
+- `experience_level`: Classified level (0-6)
+- `experience_level_label`: Human-readable label
+
+#### Salary Enhancement  
+- `min_salary`, `max_salary`, `mid_salary`: Salary range breakdown
+- `salary_currency`: Currency (USD, EUR, etc.)
+- `salary_period`: Period (yearly, monthly, hourly)
+
+#### Validation Enhancement
+- `work_location_type_corrected`: Location validation flag
+- `employment_type_corrected`: Employment type validation flag
+
 ## 🎛️ Available Commands
 
 | Command | Description | Usage |
@@ -192,6 +300,7 @@ run_parser()  # Uses default settings: "data scientist" in "San Antonio"
 | `make run-parser` | 🎯 Run LinkedIn parser (simple script) | **Recommended** |
 | `make run-parser-mod` | 🔧 Run LinkedIn parser (as module) | Advanced usage |
 | `make run-frontend` | 🖥️ Launch Streamlit web app | Interactive UI |
+| `make run-enhanced-frontend` | 🤖 Launch enhanced frontend with AI features | **AI-powered UI** |
 | `make install` | 📦 Install dependencies | First-time setup |
 | `make test` | 🧪 Run tests | Development |
 | `make clean` | 🧹 Clean temporary files | Maintenance |
