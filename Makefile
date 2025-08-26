@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend run-enhanced-frontend test clean
+.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend test clean
 
 # Default target
 help:
@@ -10,8 +10,7 @@ help:
 	@echo "  run-parser-mod       - Run the LinkedIn job parser (as module)"
 	@echo "  run-pipeline         - Run parser + data cleaner pipeline (full processing)"
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
-	@echo "  run-frontend         - Run the original frontend application"
-	@echo "  run-enhanced-frontend - Run the enhanced frontend with AI cleaning integration"
+	@echo "  run-frontend         - Run the frontend application with AI features"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
 
@@ -41,15 +40,35 @@ run-cleaner:
 	@echo "🧹 Running AI data cleaner on existing data..."
 	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose
 
-# Run the original frontend application
+# Run the frontend application with AI features
 run-frontend:
-	poetry run python genai_job_finder/frontend/run.py
-
-# Run the enhanced frontend with AI cleaning integration
-run-enhanced-frontend:
-	@echo "🚀 Starting Enhanced GenAI Job Finder Frontend..."
-	@echo "🤖 Features: Live search + AI-powered data cleaning + Enhanced display"
-	./run_enhanced_frontend.sh
+	@echo "🚀 Starting GenAI Job Finder Frontend..."
+	@echo "📊 Features:"
+	@echo "  - Live LinkedIn job search with automatic AI enhancement"
+	@echo "  - Stored job database browsing"
+	@echo "  - 🤖 AI-enhanced job data with cleaning"
+	@echo "  - Enhanced filtering and display"
+	@echo ""
+	@echo "🔍 Checking Ollama availability..."
+	@if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then \
+		echo "✅ Ollama is running - AI features available"; \
+	else \
+		echo "⚠️  Ollama not detected at localhost:11434"; \
+		echo "   AI enhancement features may not work"; \
+		echo "   Start Ollama to enable full functionality"; \
+	fi
+	@echo ""
+	@echo "🌟 Starting frontend..."
+	@echo "📱 Access at: http://localhost:8501"
+	@echo "💡 Use Ctrl+C to stop"
+	@echo ""
+	@export PYTHONPATH="${PYTHONPATH}:$(PWD)" && \
+	poetry run streamlit run genai_job_finder/frontend/app.py \
+		--server.port 8501 \
+		--server.address 0.0.0.0 \
+		--server.headless true \
+		--browser.gatherUsageStats false \
+		--logger.level info
 
 # Run tests
 test:

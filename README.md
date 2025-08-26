@@ -85,9 +85,11 @@ make run-frontend
 **Available at:** `http://localhost:8501`
 
 **Frontend Features:**
-- **🔍 Live Job Search Tab**: Interactive search with LinkedIn scraping
-  - Real-time job searching with custom parameters
+- **🔍 Live Job Search Tab**: Interactive search with LinkedIn scraping and AI enhancement
+  - Real-time job searching with custom parameters  
+  - **⏰ Enhanced time filtering**: Past hour, 24 hours, week, month options
   - Location filtering and remote job options
+  - **🤖 Automatic AI enhancement**: Jobs are processed through data cleaner pipeline
   - Results pagination and filtering
 - **📊 Stored Jobs Tab**: View jobs from database
   - Display all jobs from previous parser runs
@@ -95,6 +97,11 @@ make run-frontend
   - **🖱️ Click-to-view details**: Click any row to see full job details with formatted content and LinkedIn link
   - Advanced filtering by title, company, location, and work type
   - CSV export functionality (summary columns only)
+- **🤖 AI-Enhanced Jobs Tab**: Manage AI-processed job data
+  - View jobs enhanced with experience level classification
+  - Salary extraction and normalization
+  - Location and employment type validation
+  - Comprehensive filtering and analytics
 - **📈 Search History Tab**: Parser run analytics
   - View recent parser execution history
   - Job count and timing statistics
@@ -105,26 +112,51 @@ make run-frontend
 ```
 genai_job_finder/
 ├── 📁 genai_job_finder/           # Main package
-│   ├── 📁 frontend/              # Streamlit web frontend
-│   │   ├── app.py            # Main Streamlit application
-│   │   ├── config.py         # Frontend configuration
-│   │   └── run.py            # Application launcher
+│   ├── 📁 data_cleaner/          # 🤖 AI-powered job data enhancement
+│   │   ├── graph.py              # LangGraph workflow for data cleaning
+│   │   ├── models.py             # Data models and validation
+│   │   ├── llm.py                # LLM integration (Ollama)
+│   │   ├── config.py             # Cleaner configuration
+│   │   └── chains/               # Individual AI processing chains
+│   ├── 📁 frontend/              # 🖥️ Modular Streamlit web interface
+│   │   ├── app.py                # Main application entry point
+│   │   ├── config.py             # Frontend configuration
+│   │   ├── components/           # Reusable UI components
+│   │   │   └── job_display.py    # Job display and formatting
+│   │   ├── tabs/                 # Individual tab implementations
+│   │   │   ├── live_search.py    # Live job search with AI enhancement
+│   │   │   ├── stored_jobs.py    # Stored jobs from database
+│   │   │   ├── ai_enhanced.py    # AI-enhanced jobs display
+│   │   │   └── search_history.py # Search history and runs
+│   │   └── utils/                # Common utilities
+│   │       ├── common.py         # Shared functions and setup
+│   │       └── data_operations.py # Database and search operations
 │   ├── 📁 linkedin_parser/       # ⭐ Enhanced LinkedIn job scraping
-│   │   ├── models.py         # Job data models (17 columns)
-│   │   ├── parser.py         # LinkedIn parser with location intelligence
-│   │   ├── database.py       # Database operations with migration
-│   │   ├── config.py         # Parser configuration
-│   │   └── run_parser.py     # 🆕 Parser runner module
-│   └── 📁 legacy/               # Original scraping code (reference)
-├── 📁 notebooks/                # Jupyter notebooks for analysis
-│   └── job_analysis.ipynb   # 🆕 Enhanced analysis with location intelligence
-├── 📁 data/                     # 💾 Database and output files
-│   ├── jobs.db              # SQLite database
-│   └── jobs_export.csv      # Latest CSV export
-├── 📄 Makefile                  # 🛠️ Build automation with multiple commands
-├── 📄 run_parser.py            # 🎯 Simple parser runner (calls module)
-└── 📄 pyproject.toml           # Poetry configuration
+│   │   ├── models.py             # Job data models (17 columns)
+│   │   ├── parser.py             # LinkedIn parser with location intelligence
+│   │   ├── database.py           # Database operations with migration
+│   │   ├── config.py             # Parser configuration
+│   │   └── run_parser.py         # 🆕 Parser runner module
+│   └── 📁 legacy/                # Original scraping code (reference)
+├── 📁 notebooks/                 # Jupyter notebooks for analysis
+│   └── job_analysis.ipynb        # 🆕 Enhanced analysis with location intelligence
+├── 📁 data/                      # 💾 Database and output files
+│   ├── jobs.db                   # SQLite database
+│   └── jobs_export.csv           # Latest CSV export
+├── 📄 Makefile                   # 🛠️ Build automation with multiple commands
+├── 📄 run_parser.py              # 🎯 Simple parser runner (calls module)
+└── 📄 pyproject.toml             # Poetry configuration
 ```
+
+### 🎨 Frontend Architecture
+
+The frontend has been **refactored into a modular structure** for better maintainability:
+
+- **🎯 Modular Design**: Each tab is a separate module (~80-150 lines vs 1200+ monolithic)
+- **🔧 Reusable Components**: Common UI elements extracted to `components/`
+- **🛠️ Shared Utilities**: Database operations and common functions in `utils/`
+- **📊 Tab-Based Organization**: Live search, stored jobs, AI-enhanced, and history tabs
+- **🚀 Developer Friendly**: Easy to add new features or modify existing ones
 
 ## 📊 Enhanced Data Structure
 
@@ -299,8 +331,9 @@ The AI cleaner adds these fields to your job data:
 |---------|-------------|-------|
 | `make run-parser` | 🎯 Run LinkedIn parser (simple script) | **Recommended** |
 | `make run-parser-mod` | 🔧 Run LinkedIn parser (as module) | Advanced usage |
-| `make run-frontend` | 🖥️ Launch Streamlit web app | Interactive UI |
-| `make run-enhanced-frontend` | 🤖 Launch enhanced frontend with AI features | **AI-powered UI** |
+| `make run-pipeline` | � Run parser + AI cleaner pipeline | **Full processing** |
+| `make run-cleaner` | 🤖 Run AI data cleaner only | Process existing data |
+| `make run-frontend` | 🖥️ Launch enhanced Streamlit web app | **Interactive AI-powered UI** |
 | `make install` | 📦 Install dependencies | First-time setup |
 | `make test` | 🧪 Run tests | Development |
 | `make clean` | 🧹 Clean temporary files | Maintenance |
@@ -333,11 +366,29 @@ jobs = parser.parse_jobs(
 ```
 
 ### Time Filters
-- `r86400`: Last 24 hours ⏰
-- `r604800`: Last 7 days 📅  
-- `r2592000`: Last 30 days 📆
+
+The enhanced time filtering system supports:
+- **⏰ Past hour** (`r3600`): Most recent job postings
+- **📅 Past 24 hours** (`r86400`): Default filter 
+- **📆 Past week** (`r604800`): Weekly job updates
+- **� Past month** (`r2592000`): Monthly comprehensive search
+
+*Note: The time filter bug has been fixed - selections now properly filter LinkedIn API calls instead of defaulting to 24 hours.*
 
 ## 📈 Recent Major Updates
+
+### 🎯 Frontend Refactoring & Time Filter Fix (v3.0)
+- ✅ **Modular frontend architecture** - Split 1200+ line monolith into organized modules
+- ✅ **Enhanced time filtering** - Added "Past hour" option and fixed hardcoded filter bug
+- ✅ **Improved developer experience** - Each tab in separate file for better maintainability
+- ✅ **Streamlined Makefile** - Single `run-frontend` command with all features integrated
+- ✅ **Clean project structure** - Removed unnecessary shell scripts, organized utilities
+
+### 🤖 AI Data Cleaning Integration (v2.5)
+- ✅ **Complete AI pipeline** - Automatic job enhancement with experience, salary, and location analysis
+- ✅ **Real-time processing** - Live search results enhanced with AI in frontend
+- ✅ **Comprehensive enhancement** - 7-level experience classification, salary extraction, location validation
+- ✅ **Visual progress tracking** - Real-time AI processing status and statistics
 
 ### 🎯 LinkedIn Parser Enhancement (v2.0)
 - ✅ **Complete architecture rewrite** with modular structure
