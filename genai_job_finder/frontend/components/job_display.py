@@ -304,6 +304,9 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
     job_data = [format_job_for_display(job, is_cleaned=is_cleaned_data) for job in current_page_jobs]
     df = pd.DataFrame(job_data)
     
+    # Add original indices to track which job from current_page_jobs each row represents
+    df['_original_job_index'] = range(len(current_page_jobs))
+    
     # Filter to only show requested columns
     if is_cleaned_data:
         # Enhanced display columns for cleaned data
@@ -368,8 +371,12 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
                                              options=["All"] + filtered_df["Work Location Type"].unique().tolist() if "Work Location Type" in filtered_df.columns else ["All"],
                                              key=f"work_type_filter_{title.replace(' ', '_')}")
         
-        # Apply filters
+        # Apply filters - we need to preserve the _original_job_index during filtering
         display_df = filtered_df.copy()
+        
+        # Include the tracking column from original df for filtering operations
+        if '_original_job_index' in df.columns:
+            display_df['_original_job_index'] = df['_original_job_index']
         
         if title_filter:
             display_df = display_df[display_df["Title"].str.contains(title_filter, case=False, na=False)]
@@ -405,7 +412,8 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
                     display_df = display_df[display_df['_min_salary_numeric'] <= max_salary_filter]
                 
                 # Remove the temporary column
-                display_df = display_df.drop('_min_salary_numeric', axis=1)
+                if '_min_salary_numeric' in display_df.columns:
+                    display_df = display_df.drop('_min_salary_numeric', axis=1)
         
         # Show filter results info
         if len(display_df) != len(filtered_df):
@@ -415,8 +423,17 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
         if not display_df.empty:
             st.markdown("💡 **Click on a row to view detailed job information**")
             
-            # Create a copy for display with row indices
-            display_with_index = display_df.reset_index(drop=True)
+            # Create a copy for display, removing the original index tracking column if it exists
+            # but preserve the tracking information separately
+            display_columns_to_show = [col for col in display_df.columns if col != '_original_job_index']
+            display_with_index = display_df[display_columns_to_show].reset_index(drop=True)
+            
+            # Create a mapping from the reset index to the original job index
+            if '_original_job_index' in display_df.columns:
+                # Extract the original job indices corresponding to the filtered rows
+                original_indices_mapping = display_df['_original_job_index'].reset_index(drop=True)
+            else:
+                original_indices_mapping = None
             
             # Display the dataframe with click handling
             if is_cleaned_data:
@@ -505,12 +522,26 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
             # Handle row selection
             if selected_indices.selection.rows:
                 selected_row_index = selected_indices.selection.rows[0]
-                # Get the actual job index from current page
-                actual_job_index = start_idx + selected_row_index
                 
-                if actual_job_index < len(jobs_data):
-                    selected_job_data = jobs_data[actual_job_index]
+                # Check if we have the original job index mapping
+                if original_indices_mapping is not None:
+                    # Get the original job index from the mapping
+                    original_job_index = original_indices_mapping.iloc[selected_row_index]
                     
+                    # Get the job data from current_page_jobs using the original index
+                    if original_job_index < len(current_page_jobs):
+                        selected_job_data = current_page_jobs[original_job_index]
+                    else:
+                        selected_job_data = None
+                else:
+                    # Fallback to the old method if no tracking mapping
+                    actual_job_index = start_idx + selected_row_index
+                    if actual_job_index < len(jobs_data):
+                        selected_job_data = jobs_data[actual_job_index]
+                    else:
+                        selected_job_data = None
+                
+                if selected_job_data:
                     # Convert to dict if it's a Job object
                     if not isinstance(selected_job_data, dict):
                         if hasattr(selected_job_data, 'to_dict'):
