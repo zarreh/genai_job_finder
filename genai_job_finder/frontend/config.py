@@ -24,15 +24,16 @@ class FrontendConfig:
     search_delay_max: float = 4.0
     
     # Time filter options
-    time_filter_options: Dict[str, int] = None
+    time_filter_options: Dict[str, str] = None
     
     def __post_init__(self):
         if self.time_filter_options is None:
             self.time_filter_options = {
                 "Any time": None,
-                "Past 24 hours": 1,
-                "Past week": 7,
-                "Past month": 30
+                "Past hour": "r3600",      # 1 hour in seconds
+                "Past 24 hours": "r86400", # 24 hours in seconds
+                "Past week": "r604800",    # 7 days in seconds
+                "Past month": "r2592000"   # 30 days in seconds
             }
     
     @classmethod

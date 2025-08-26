@@ -70,9 +70,10 @@ def get_time_filter_options():
     """Get time filter options for job posting dates"""
     return {
         "Any time": None,
-        "Past 24 hours": 1,
-        "Past week": 7,
-        "Past month": 30
+        "Past hour": "r3600",      # 1 hour in seconds
+        "Past 24 hours": "r86400", # 24 hours in seconds
+        "Past week": "r604800",    # 7 days in seconds
+        "Past month": "r2592000"   # 30 days in seconds
     }
 
 def load_jobs_from_database() -> List[dict]:
@@ -439,7 +440,7 @@ def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
             "Job ID": job_data.id if job_data.id else "N/A"
         }
 
-def search_jobs(search_query: str, location: str, max_pages: int, time_filter: Optional[int] = None, remote_only: bool = False):
+def search_jobs(search_query: str, location: str, max_pages: int, time_filter: Optional[str] = None, remote_only: bool = False):
     """Enhanced search with real-time progress tracking"""
     try:
         # Clean and prepare inputs
@@ -488,11 +489,14 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                     st.info(f"📋 Collecting job IDs from {max_pages} pages...")
                 
                 # Get job IDs first
+                # Use the provided time filter or default to past 24 hours
+                linkedin_time_filter = time_filter if time_filter else "r86400"
+                
                 job_ids = parser._get_job_ids(
                     search_query=search_query,
                     location=location,
                     total_jobs=total_jobs_estimate,
-                    time_filter="r86400",
+                    time_filter=linkedin_time_filter,
                     remote=remote_only,
                     parttime=False
                 )
@@ -545,30 +549,7 @@ def search_jobs(search_query: str, location: str, max_pages: int, time_filter: O
                 
                 logger.info(f"Found {len(jobs_dict)} jobs from parsing")
                 
-                # Step 7: Apply time filter if specified
-                if time_filter and jobs_dict:
-                    with status_placeholder.container():
-                        st.info(f"⏰ Applying time filter ({time_filter} days)...")
-                    
-                    logger.info(f"Applying time filter: {time_filter} days")
-                    cutoff_date = datetime.now() - timedelta(days=time_filter)
-                    original_count = len(jobs_dict)
-                    
-                    filtered_jobs = []
-                    for job in jobs_dict:
-                        # For simplicity in live search, include all jobs
-                        try:
-                            if job.get('posted_time'):
-                                filtered_jobs.append(job)
-                            else:
-                                filtered_jobs.append(job)
-                        except:
-                            filtered_jobs.append(job)
-                    
-                    logger.info(f"After time filtering: {len(filtered_jobs)} jobs remain")
-                    jobs_dict = filtered_jobs
-                
-                # Step 8: AI Enhancement with Data Cleaner
+                # Step 7: AI Enhancement with Data Cleaner
                 if jobs_dict:
                     with status_placeholder.container():
                         st.info(f"🤖 Enhancing {len(jobs_dict)} jobs with AI analysis...")
