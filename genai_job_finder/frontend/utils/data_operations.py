@@ -96,7 +96,7 @@ def get_recent_runs_from_database() -> List[dict]:
         logger.error(f"Error loading runs from database: {e}")
         return []
 
-def run_data_cleaner(db_path: str) -> bool:
+def run_data_cleaner(db_path: str, progress_callback=None) -> bool:
     """Run the data cleaner on the database"""
     try:
         logger.info("Starting data cleaner...")
@@ -112,7 +112,7 @@ def run_data_cleaner(db_path: str) -> bool:
         
         # Run asynchronously
         async def clean_data():
-            await graph.process_database_table(db_path, "jobs", "cleaned_jobs")
+            await graph.process_database_table(db_path, "jobs", "cleaned_jobs", progress_callback)
         
         # Use asyncio to run the cleaning
         loop = asyncio.new_event_loop()
@@ -230,7 +230,7 @@ def search_jobs(search_query: str, location: str, max_pages: int,
             
             # Step 7: AI Enhancement with Data Cleaner
             if jobs_dict:
-                update_progress(f"🤖 Enhancing {len(jobs_dict)} jobs with AI analysis...", 7)
+                update_progress(f"🤖 Starting AI enhancement for {len(jobs_dict)} jobs...", 7)
                 
                 logger.info("Starting AI enhancement with data cleaner...")
                 
@@ -245,19 +245,18 @@ def search_jobs(search_query: str, location: str, max_pages: int,
                     # Process the jobs through the AI cleaning pipeline
                     try:
                         logger.info(f"Processing {len(jobs_dict)} jobs with AI enhancement...")
-                        update_progress("🔧 Running AI data enhancement pipeline...", 8)
                         
                         # Run the async process_database_table in a new event loop
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                        loop.run_until_complete(graph.process_database_table(temp_db.name, "jobs", "cleaned_jobs"))
+                        loop.run_until_complete(graph.process_database_table(temp_db.name, "jobs", "cleaned_jobs", update_progress))
                         loop.close()
                         logger.info("AI enhancement completed successfully")
                     except RuntimeError as re:
                         # If we're already in an event loop, use run_data_cleaner instead
                         logger.info(f"AsyncIO RuntimeError: {re}, using synchronous data cleaner approach...")
                         update_progress("🔧 Using alternative AI enhancement method...", 8)
-                        success = run_data_cleaner(temp_db.name)
+                        success = run_data_cleaner(temp_db.name, update_progress)
                         if not success:
                             raise Exception("Data cleaner failed")
                     except Exception as e:

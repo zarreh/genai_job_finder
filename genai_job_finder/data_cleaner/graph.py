@@ -130,8 +130,9 @@ class JobCleaningGraph:
                 result_dict = self._state_to_dict(result_state, job_data)
                 results.append(result_dict)
                 
+                # Call progress callback with detailed AI enhancement progress
                 if progress_callback:
-                    progress_callback(idx + 1, len(df))
+                    progress_callback(f"🤖 AI enhancement: processing job details ({idx + 1}/{len(df)})", 7)
                 
             except Exception as e:
                 print(f"Error processing job {idx}: {e}")
@@ -139,6 +140,10 @@ class JobCleaningGraph:
                 error_dict = job_data.copy()
                 error_dict["processing_error"] = str(e)
                 results.append(error_dict)
+                
+                # Still call progress callback for failed jobs
+                if progress_callback:
+                    progress_callback(f"🤖 AI enhancement: processing job details ({idx + 1}/{len(df)})", 7)
         
         end_time = time.time()
         print(f"Processing completed in {end_time - start_time:.2f} seconds")
@@ -215,7 +220,7 @@ class JobCleaningGraph:
         finally:
             conn.close()
     
-    async def process_database_table(self, db_path: str, source_table: str = "jobs", target_table: str = "cleaned_jobs"):
+    async def process_database_table(self, db_path: str, source_table: str = "jobs", target_table: str = "cleaned_jobs", progress_callback=None):
         """Process jobs from database table and save results."""
         print(f"Processing database: {db_path}")
         print(f"Source table: {source_table}")
@@ -224,8 +229,8 @@ class JobCleaningGraph:
         # Load data
         df = self.load_from_database(db_path, source_table)
         
-        # Process data
-        cleaned_df = await self.process_dataframe(df)
+        # Process data with progress callback
+        cleaned_df = await self.process_dataframe(df, progress_callback)
         
         # Save results
         self.save_to_database(cleaned_df, db_path, target_table)
