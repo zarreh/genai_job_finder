@@ -260,8 +260,8 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
     with col_results:
         rows_per_page = st.selectbox(
             "Results per Page",
-            options=[5, 10, 15, 20, 25, 50],
-            index=1,  # Default to 10
+            options=[5, 10, 15, 20, 25, 30, 50],
+            index=5,  # Default to 30
             help="Number of job results to display per page",
             key=f"results_per_page_{title.replace(' ', '_')}"
         )
@@ -513,6 +513,7 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
             selected_indices = st.dataframe(
                 display_with_index,
                 use_container_width=True,
+                height=min(1000, len(display_with_index) * 35 + 50),  # Dynamic height to show all rows
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",

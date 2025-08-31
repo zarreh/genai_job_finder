@@ -46,7 +46,7 @@ def initialize_session_state():
         'cleaned_jobs': [],
         'current_page': 1,
         'search_performed': False,
-        'rows_per_page': 10,
+        'rows_per_page': 30,
         'jobs_loaded': False,
         'selected_job': None,
         'show_job_details': False,
