@@ -1,61 +1,268 @@
-#!/usr/bin/env python3
 """
-LinkedIn Company Information Enrichment Script
-
-This script enriches existing job data with detailed company information including:
-- Company size (number of employees)
-- Number of followers
-- Industry information
-
-Usage:
-    python company_enrichment.py [options]
-
-Examples:
-    # Enrich all companies in database
-    python company_enrichment.py
-    
-    # Enrich specific company
-    python company_enrichment.py --company "Microsoft"
-    
-    # Show companies that need enrichment
-    python company_enrichment.py --show-missing
+Company enrichment service for LinkedIn parser.
+Manages company information in a separate pipeline to avoid redundant parsing.
 """
 
-import argparse
 import logging
-import sys
-from pathlib import Path
-from typing import List, Dict, Any
 import time
-import random
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
 
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+from .models import Company
+from .database import DatabaseManager
+from .company_parser import LinkedInCompanyParser
 
-from genai_job_finder.linkedin_parser.database import DatabaseManager
-from genai_job_finder.linkedin_parser.company_parser import LinkedInCompanyParser
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class CompanyEnrichmentResult:
+    """Result of company enrichment operation"""
+    company_id: str
+    was_existing: bool
+    was_enriched: bool
+    error: Optional[str] = None
+
+
 class CompanyEnrichmentService:
-    """Service for enriching company data from LinkedIn"""
+    """
+    Service to manage company information enrichment.
+    Uses a lookup-first approach to avoid redundant parsing.
+    """
     
-    def __init__(self, db_path: str = "data/jobs.db"):
-        self.db = DatabaseManager(db_path)
-        self.company_parser = LinkedInCompanyParser(self.db)
+    def __init__(self, db_path: str = "data/jobs.db", database: Optional[DatabaseManager] = None):
+        # Support both legacy (db_path) and new (database) initialization
+        if database:
+            self.database = database
+        else:
+            self.database = DatabaseManager(db_path)
+        self.company_parser = LinkedInCompanyParser(database=self.database)
         self.enriched_count = 0
         self.failed_count = 0
+        
+    def get_or_enrich_company(self, company_name: str, job_soup=None) -> CompanyEnrichmentResult:
+        """
+        Get company information from database or enrich if not exists.
+        
+        Args:
+            company_name: Name of the company
+            job_soup: BeautifulSoup object from job page (optional, for company link extraction)
+            
+        Returns:
+            CompanyEnrichmentResult with company_id and enrichment status
+        """
+        try:
+            # First, check if company exists in database
+            existing_company = self.database.get_company_by_name(company_name)
+            
+            if existing_company:
+                # Company exists - check if it needs enrichment
+                if self._needs_enrichment(existing_company):
+                    logger.debug(f"Company {company_name} exists but needs enrichment")
+                    return self._enrich_existing_company(existing_company, job_soup)
+                else:
+                    logger.debug(f"Company {company_name} already fully enriched")
+                    return CompanyEnrichmentResult(
+                        company_id=existing_company['id'],
+                        was_existing=True,
+                        was_enriched=False
+                    )
+            else:
+                # Company doesn't exist - create and enrich
+                logger.debug(f"Company {company_name} not found, creating new entry")
+                return self._create_and_enrich_company(company_name, job_soup)
+                
+        except Exception as e:
+            logger.error(f"Error enriching company {company_name}: {e}")
+            # Create basic company record as fallback
+            basic_company = Company(company_name=company_name)
+            company_id = self.database.save_company(basic_company)
+            return CompanyEnrichmentResult(
+                company_id=company_id,
+                was_existing=False,
+                was_enriched=False,
+                error=str(e)
+            )
+    
+    def _needs_enrichment(self, company_data: Dict[str, Any]) -> bool:
+        """
+        Check if a company needs enrichment (missing key information).
+        
+        Args:
+            company_data: Company data from database
+            
+        Returns:
+            True if company needs enrichment, False otherwise
+        """
+        # Consider a company "enriched" if it has at least one of the key fields
+        key_fields = ['company_size', 'followers', 'industry', 'company_url']
+        has_any_info = any(company_data.get(field) for field in key_fields)
+        
+        # Also check if data is too old (older than 30 days) - optional future enhancement
+        # For now, we'll consider any company with some info as "enriched"
+        
+        return not has_any_info
+    
+    def _enrich_existing_company(self, existing_company: Dict[str, Any], job_soup=None) -> CompanyEnrichmentResult:
+        """
+        Enrich an existing company with more information.
+        
+        Args:
+            existing_company: Existing company data from database
+            job_soup: BeautifulSoup object from job page (optional)
+            
+        Returns:
+            CompanyEnrichmentResult
+        """
+        try:
+            company_name = existing_company['company_name']
+            
+            if job_soup:
+                # Try to extract company information from job page
+                company_info = self.company_parser.extract_company_info_from_job_page(job_soup, company_name)
+                if company_info:
+                    # Update the existing company with new information
+                    company_id = self.database.save_company(company_info)
+                    logger.info(f"Enriched existing company: {company_name}")
+                    return CompanyEnrichmentResult(
+                        company_id=company_id,
+                        was_existing=True,
+                        was_enriched=True
+                    )
+            
+            # If we couldn't enrich, return the existing company
+            return CompanyEnrichmentResult(
+                company_id=existing_company['id'],
+                was_existing=True,
+                was_enriched=False
+            )
+            
+        except Exception as e:
+            logger.warning(f"Failed to enrich existing company {existing_company['company_name']}: {e}")
+            return CompanyEnrichmentResult(
+                company_id=existing_company['id'],
+                was_existing=True,
+                was_enriched=False,
+                error=str(e)
+            )
+    
+    def _create_and_enrich_company(self, company_name: str, job_soup=None) -> CompanyEnrichmentResult:
+        """
+        Create a new company and enrich it with information.
+        
+        Args:
+            company_name: Name of the company
+            job_soup: BeautifulSoup object from job page (optional)
+            
+        Returns:
+            CompanyEnrichmentResult
+        """
+        try:
+            if job_soup:
+                # Try to extract company information from job page
+                company_info = self.company_parser.extract_company_info_from_job_page(job_soup, company_name)
+                if company_info:
+                    company_id = self.database.save_company(company_info)
+                    logger.info(f"Created and enriched new company: {company_name}")
+                    return CompanyEnrichmentResult(
+                        company_id=company_id,
+                        was_existing=False,
+                        was_enriched=True
+                    )
+            
+            # Create basic company record if we couldn't extract info
+            basic_company = Company(company_name=company_name)
+            company_id = self.database.save_company(basic_company)
+            logger.debug(f"Created basic company record: {company_name}")
+            return CompanyEnrichmentResult(
+                company_id=company_id,
+                was_existing=False,
+                was_enriched=False
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create and enrich company {company_name}: {e}")
+            raise
+    
+    def bulk_enrich_companies(self, company_names: List[str], force_refresh: bool = False) -> Dict[str, CompanyEnrichmentResult]:
+        """
+        Enrich multiple companies in bulk.
+        
+        Args:
+            company_names: List of company names to enrich
+            force_refresh: If True, re-enrich even if companies exist
+            
+        Returns:
+            Dictionary mapping company names to enrichment results
+        """
+        import random
+        
+        results = {}
+        
+        for i, company_name in enumerate(company_names):
+            try:
+                logger.info(f"Enriching company {i+1}/{len(company_names)}: {company_name}")
+                
+                if force_refresh:
+                    # Force re-enrichment by extracting fresh data
+                    result = self._create_and_enrich_company(company_name)
+                else:
+                    # Use normal lookup-first approach
+                    result = self.get_or_enrich_company(company_name)
+                
+                results[company_name] = result
+                
+                # Add delay between company enrichments to be respectful
+                if i < len(company_names) - 1:  # Don't delay after the last one
+                    delay = 8  # 8 seconds between company enrichments
+                    logger.debug(f"Waiting {delay} seconds before next company...")
+                    time.sleep(delay)
+                    
+            except Exception as e:
+                logger.error(f"Error enriching company {company_name}: {e}")
+                results[company_name] = CompanyEnrichmentResult(
+                    company_id="",
+                    was_existing=False,
+                    was_enriched=False,
+                    error=str(e)
+                )
+        
+        return results
     
     def get_companies_needing_enrichment(self) -> List[Dict[str, Any]]:
-        """Get list of companies that need additional information"""
-        with self.db.get_connection() as conn:
+        """
+        Get list of companies that need enrichment.
+        
+        Returns:
+            List of company records that need enrichment
+        """
+        all_companies = self.database.get_all_companies()
+        return [company for company in all_companies if self._needs_enrichment(company)]
+    
+    def get_enrichment_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about company enrichment status.
+        
+        Returns:
+            Dictionary with enrichment statistics
+        """
+        all_companies = self.database.get_all_companies()
+        
+        total = len(all_companies)
+        enriched = len([c for c in all_companies if not self._needs_enrichment(c)])
+        needs_enrichment = total - enriched
+        
+        return {
+            'total_companies': total,
+            'enriched_companies': enriched,
+            'companies_needing_enrichment': needs_enrichment,
+            'enrichment_percentage': round((enriched / total * 100) if total > 0 else 0, 1)
+        }
+
+    # Legacy methods for compatibility with existing scripts
+    def get_companies_needing_enrichment_legacy(self) -> List[Dict[str, Any]]:
+        """Get list of companies that need additional information (legacy compatibility)"""
+        with self.database.get_connection() as conn:
             cursor = conn.cursor()
             
             # Get companies with missing information
@@ -75,11 +282,11 @@ class CompanyEnrichmentService:
     
     def get_all_companies(self) -> List[Dict[str, Any]]:
         """Get all companies in database"""
-        return self.db.get_all_companies()
+        return self.database.get_all_companies()
     
     def get_companies_from_jobs(self) -> List[str]:
         """Get unique company names from jobs that don't have company records"""
-        with self.db.get_connection() as conn:
+        with self.database.get_connection() as conn:
             cursor = conn.cursor()
             
             cursor.execute('''
@@ -93,19 +300,21 @@ class CompanyEnrichmentService:
             return [row[0] for row in cursor.fetchall()]
     
     def enrich_company_by_name(self, company_name: str, force: bool = False) -> bool:
-        """Enrich a specific company by name"""
+        """Enrich a specific company by name (legacy compatibility)"""
+        import random
+        
         try:
             logger.info(f"Enriching company: {company_name}")
             
             # Check if company already has complete information
-            existing = self.db.get_company_by_name(company_name)
+            existing = self.database.get_company_by_name(company_name)
             if existing and not force:
                 if all([existing.get('company_size'), existing.get('followers'), existing.get('industry')]):
                     logger.info(f"Company {company_name} already has complete information")
                     return True
             
             # Try to get a recent job posting for this company to extract info
-            with self.db.get_connection() as conn:
+            with self.database.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
                     SELECT job_posting_link 
@@ -153,8 +362,8 @@ class CompanyEnrichmentService:
             return False
     
     def enrich_all_companies(self, limit: int = None) -> Dict[str, int]:
-        """Enrich all companies that need additional information"""
-        companies_to_enrich = self.get_companies_needing_enrichment()
+        """Enrich all companies that need additional information (legacy compatibility)"""
+        companies_to_enrich = self.get_companies_needing_enrichment_legacy()
         
         if limit:
             companies_to_enrich = companies_to_enrich[:limit]
@@ -184,9 +393,8 @@ class CompanyEnrichmentService:
         
         for company_name in missing_companies:
             try:
-                from genai_job_finder.linkedin_parser.models import Company
                 basic_company = Company(company_name=company_name)
-                self.db.save_company(basic_company)
+                self.database.save_company(basic_company)
                 created_count += 1
                 logger.info(f"Created basic record for: {company_name}")
             except Exception as e:
@@ -197,7 +405,7 @@ class CompanyEnrichmentService:
     def show_statistics(self):
         """Show company enrichment statistics"""
         all_companies = self.get_all_companies()
-        companies_needing_enrichment = self.get_companies_needing_enrichment()
+        companies_needing_enrichment = self.get_companies_needing_enrichment_legacy()
         missing_companies = self.get_companies_from_jobs()
         
         total_companies = len(all_companies)
@@ -230,6 +438,9 @@ class CompanyEnrichmentService:
 
 
 def main():
+    """CLI for company enrichment service"""
+    import argparse
+    
     parser = argparse.ArgumentParser(description='Enrich LinkedIn company information')
     parser.add_argument('--company', type=str, help='Enrich specific company by name')
     parser.add_argument('--limit', type=int, help='Limit number of companies to process')
