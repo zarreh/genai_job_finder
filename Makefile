@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-pipeline run-cleaner run-frontend test clean
+.PHONY: help install run-parser run-pipeline run-cleaner run-frontend run-company-enrichment test clean
 
 # Default target
 help:
@@ -10,12 +10,15 @@ help:
 	@echo "  run-pipeline         - Run parser + data cleaner pipeline (full processing)"
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
 	@echo "  run-frontend         - Run the frontend application with AI features"
+	@echo "  run-company-enrichment - Run company enrichment pipeline separately"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
 	@echo ""
 	@echo "Advanced options:"
 	@echo "  make run-parser QUERY='software engineer' LOCATION='Austin' JOBS=100"
 	@echo "  make run-parser REMOTE=true PARTTIME=true"
+	@echo "  make run-company-enrichment STATS=true  # Show enrichment statistics"
+	@echo "  make run-company-enrichment ENRICH=true # Enrich all companies"
 
 # Install dependencies
 install:
@@ -23,14 +26,15 @@ install:
 
 # Run comprehensive LinkedIn parser with integrated company intelligence
 run-parser:
-	@echo "🚀 COMPREHENSIVE LINKEDIN JOB PARSER"
-	@echo "======================================"
+	@echo "🚀 COMPREHENSIVE LINKEDIN JOB PARSER (OPTIMIZED)"
+	@echo "=================================================="
 	@echo "✨ Features:"
-	@echo "   🎯 Job data extraction (20-column output)"
-	@echo "   🏢 Company intelligence (size, followers, industry)"
+	@echo "   🎯 Job data extraction (21-column output)"
+	@echo "   🏢 Optimized company handling (lookup-first approach)"
 	@echo "   📍 Location intelligence & work type classification"
 	@echo "   🛡️ Smart rate limiting (5-10s delays)"
 	@echo "   📤 Automatic CSV export"
+	@echo "   ⚡ Avoids redundant company parsing"
 	@echo ""
 	@if [ "$(QUERY)" != "" ]; then \
 		echo "🔍 Custom search query: $(QUERY)"; \
@@ -62,14 +66,18 @@ run-parser:
 run-pipeline:
 	@echo "🚀 FULL PROCESSING PIPELINE"
 	@echo "============================"
-	@echo "📥 Step 1: Comprehensive LinkedIn parsing with company intelligence"
+	@echo "📥 Step 1: Comprehensive LinkedIn parsing with optimized company handling"
 	@$(MAKE) run-parser
 	@echo ""
-	@echo "🧹 Step 2: AI-powered data cleaning and enhancement"
+	@echo "🏢 Step 2: Company enrichment for any missing company data"
+	@echo "   (Only enriches companies that need additional information)"
+	poetry run python run_company_enrichment.py --enrich-all --verbose
+	@echo ""
+	@echo "🧹 Step 3: AI-powered data cleaning and enhancement"
 	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose
 	@echo ""
 	@echo "✅ PIPELINE COMPLETE!"
-	@echo "💾 Results in data/jobs.db (raw + cleaned tables)"
+	@echo "💾 Results in data/jobs.db (jobs + companies + cleaned tables)"
 	@echo "📤 CSV exports available in data/ folder"
 	@echo "📊 Analyze: notebooks/job_analysis.ipynb"
 
@@ -111,6 +119,39 @@ run-frontend:
 # Run tests
 test:
 	poetry run pytest
+
+# Run company enrichment pipeline separately
+run-company-enrichment:
+	@echo "🏢 COMPANY ENRICHMENT PIPELINE"
+	@echo "=============================="
+	@echo "📊 Features:"
+	@echo "   🔍 Lookup-first approach (avoids redundant parsing)"
+	@echo "   🏢 Separate company data management"
+	@echo "   📈 Enrichment statistics and progress tracking"
+	@echo "   ⚡ Efficient batch processing"
+	@echo ""
+	@if [ "$(STATS)" = "true" ]; then \
+		echo "📊 Showing company enrichment statistics..."; \
+		poetry run python run_company_enrichment.py --stats; \
+	elif [ "$(ENRICH)" = "true" ]; then \
+		echo "🚀 Starting company enrichment process..."; \
+		poetry run python run_company_enrichment.py --enrich-all --verbose; \
+	elif [ "$(COMPANY)" != "" ]; then \
+		echo "🔍 Enriching specific company: $(COMPANY)"; \
+		poetry run python run_company_enrichment.py --company "$(COMPANY)" --verbose; \
+	elif [ "$(CREATE)" = "true" ]; then \
+		echo "🏗️  Creating missing company records..."; \
+		poetry run python run_company_enrichment.py --create-missing --verbose; \
+	else \
+		echo "💡 Usage examples:"; \
+		echo "   make run-company-enrichment STATS=true     # Show statistics"; \
+		echo "   make run-company-enrichment ENRICH=true    # Enrich all companies"; \
+		echo "   make run-company-enrichment COMPANY='Microsoft'  # Enrich specific company"; \
+		echo "   make run-company-enrichment CREATE=true    # Create missing company records"; \
+		echo ""; \
+		echo "📊 Showing current statistics:"; \
+		poetry run python run_company_enrichment.py --stats; \
+	fi
 
 # Clean up temporary files
 clean:

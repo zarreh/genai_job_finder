@@ -4,13 +4,173 @@ Display components for job data formatting and viewing
 import pandas as pd
 import streamlit as st
 import math
+import sqlite3
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+def get_company_info(company_name: str, database_path: str = None) -> Dict[str, Any]:
+    """Get company information from the companies table"""
+    if not database_path:
+        database_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'jobs.db')
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"DEBUG: Looking up company '{company_name}' in database: {database_path}")
+    
+    try:
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT company_size, followers, industry, company_url 
+            FROM companies 
+            WHERE company_name = ? LIMIT 1
+        """, (company_name,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            company_info = {
+                'company_size': result[0],
+                'followers': result[1],
+                'industry': result[2],
+                'company_url': result[3]
+            }
+            logger.info(f"DEBUG: Found company info for '{company_name}': {company_info}")
+            return company_info
+        else:
+            logger.info(f"DEBUG: No company info found for '{company_name}'")
+    except Exception as e:
+        logger.error(f"DEBUG: Error getting company info for '{company_name}': {e}")
+    
+    return {}
+
+def format_company_info_only(company_info: Dict) -> str:
+    """Format only the company info part (without company name) for a separate column"""
+    if not company_info:
+        return "N/A"
+    
+    parts = []
+    if company_info.get('industry'):
+        parts.append(f"🏭 {company_info['industry']}")
+    if company_info.get('company_size'):
+        parts.append(f"👥 {company_info['company_size']}")
+    if company_info.get('followers'):
+        followers = company_info['followers']
+        # Handle both raw numbers and formatted strings like "13,632 followers"
+        if isinstance(followers, str):
+            if 'followers' in followers:
+                # Extract number from "13,632 followers"
+                followers_str = followers.replace(' followers', '').replace(',', '')
+                if followers_str.isdigit():
+                    followers_num = int(followers_str)
+                    if followers_num >= 1000000:
+                        followers_display = f"{followers_num/1000000:.1f}M"
+                    elif followers_num >= 1000:
+                        followers_display = f"{followers_num/1000:.1f}K"
+                    else:
+                        followers_display = str(followers_num)
+                    parts.append(f"👨‍💼 {followers_display} followers")
+                else:
+                    # Use as-is if we can't parse it
+                    parts.append(f"👨‍💼 {followers}")
+            elif followers.isdigit():
+                followers_num = int(followers)
+                if followers_num >= 1000000:
+                    followers_display = f"{followers_num/1000000:.1f}M"
+                elif followers_num >= 1000:
+                    followers_display = f"{followers_num/1000:.1f}K"
+                else:
+                    followers_display = str(followers_num)
+                parts.append(f"👨‍💼 {followers_display} followers")
+        elif isinstance(followers, int):
+            if followers >= 1000000:
+                followers_display = f"{followers/1000000:.1f}M"
+            elif followers >= 1000:
+                followers_display = f"{followers/1000:.1f}K"
+            else:
+                followers_display = str(followers)
+            parts.append(f"👨‍💼 {followers_display} followers")
+    
+    return " • ".join(parts) if parts else "N/A"
+
+def format_company_display(company_name: str, company_info: Dict = None, job_data: Dict = None) -> str:
+    """Format company information for display"""
+    if not company_info:
+        # First try to get company info from job data (for live search results)
+        if job_data:
+            company_info = {}
+            if job_data.get('company_size'):
+                company_info['company_size'] = job_data['company_size']
+            if job_data.get('company_followers'):
+                company_info['followers'] = job_data['company_followers']
+            if job_data.get('company_industry'):
+                company_info['industry'] = job_data['company_industry']
+            if job_data.get('company_info_link'):
+                company_info['company_url'] = job_data['company_info_link']
+            
+            # Debug print for immediate feedback
+            print(f"🔍 COMPANY DEBUG: '{company_name}' job_data fields: size={job_data.get('company_size')}, followers={job_data.get('company_followers')}, industry={job_data.get('company_industry')}")
+            print(f"🔍 COMPANY DEBUG: Built company_info: {company_info}")
+        
+        # If no company info from job data, try database lookup
+        if not company_info or not any(company_info.values()):
+            company_info = get_company_info(company_name)
+            print(f"🔍 COMPANY DEBUG: '{company_name}' database lookup result: {company_info}")
+    
+    company_display = company_name
+    
+    if company_info:
+        parts = []
+        if company_info.get('industry'):
+            parts.append(f"🏭 {company_info['industry']}")
+        if company_info.get('company_size'):
+            parts.append(f"👥 {company_info['company_size']}")
+        if company_info.get('followers'):
+            followers = company_info['followers']
+            if isinstance(followers, (int, str)) and str(followers).isdigit():
+                followers_num = int(followers)
+                if followers_num >= 1000000:
+                    followers_str = f"{followers_num/1000000:.1f}M"
+                elif followers_num >= 1000:
+                    followers_str = f"{followers_num/1000:.1f}K"
+                else:
+                    followers_str = str(followers_num)
+                parts.append(f"👨‍💼 {followers_str} followers")
+        
+        if parts:
+            company_display += f" ({' • '.join(parts)})"
+            print(f"🔍 COMPANY DEBUG: Final display for '{company_name}': {company_display}")
+    else:
+        print(f"🔍 COMPANY DEBUG: No company_info for '{company_name}', using plain name")
+    
+    return company_display
 
 def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
     """Format job data for display in table - supports both Job objects and dict data"""
     # Handle both Job objects and dictionary data
     if isinstance(job_data, dict):
+        company_name = job_data.get("company", "N/A")
+        
+        # Get company info for separate column
+        company_info = {}
+        if job_data.get('company_size'):
+            company_info['company_size'] = job_data['company_size']
+        if job_data.get('company_followers'):
+            company_info['followers'] = job_data['company_followers']
+        if job_data.get('company_industry'):
+            company_info['industry'] = job_data['company_industry']
+        if job_data.get('company_info_link'):
+            company_info['company_url'] = job_data['company_info_link']
+        
+        # If no company info from job data, try database lookup
+        if not company_info or not any(company_info.values()):
+            company_info = get_company_info(company_name)
+        
+        company_info_display = format_company_info_only(company_info)
+        
         if is_cleaned:
             # Enhanced cleaned data format with AI-enhanced fields
             
@@ -37,7 +197,8 @@ def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
                 years_exp = "N/A"
             
             base_format = {
-                "Company": job_data.get("company", "N/A"),
+                "Company": company_name,
+                "Company Info": company_info_display,
                 "Title": job_data.get("title", "N/A"),
                 "Location": job_data.get("location", "N/A"),
                 "Work Location Type": job_data.get("work_location_type", "N/A"),
@@ -55,7 +216,8 @@ def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
         else:
             # Data from database (dictionary format) - original
             return {
-                "Company": job_data.get("company", "N/A"),
+                "Company": company_name,
+                "Company Info": company_info_display,
                 "Title": job_data.get("title", "N/A"),
                 "Location": job_data.get("location", "N/A"),
                 "Work Location Type": job_data.get("work_location_type", "N/A"),
@@ -70,8 +232,30 @@ def format_job_for_display(job_data: dict, is_cleaned: bool = False) -> dict:
             }
     else:
         # Job object format (for backwards compatibility)
+        company_name = job_data.company if job_data.company else "N/A"
+        # Convert job object to dict for company display lookup
+        job_dict = {
+            'company_size': getattr(job_data, 'company_size', None),
+            'company_followers': getattr(job_data, 'company_followers', None),
+            'company_industry': getattr(job_data, 'company_industry', None),
+            'company_info_link': getattr(job_data, 'company_info_link', None)
+        }
+        # Create company_info from job attributes and get database info if needed
+        company_info = {
+            'company_size': job_dict.get('company_size'),
+            'followers': job_dict.get('company_followers'),
+            'industry': job_dict.get('company_industry')
+        }
+        
+        # If no company info from job object, try database lookup
+        if not company_info or not any(company_info.values()):
+            company_info = get_company_info(company_name)
+        
+        company_info_display = format_company_info_only(company_info)
+        
         return {
-            "Company": job_data.company if job_data.company else "N/A",
+            "Company": company_name,
+            "Company Info": company_info_display,
             "Title": job_data.title if job_data.title else "N/A",
             "Location": job_data.location if job_data.location else "N/A",
             "Work Location Type": job_data.work_location_type if job_data.work_location_type else "N/A",
@@ -106,9 +290,58 @@ def display_job_details(job_data: dict):
         else:
             st.info("📊 Original Job Data")
     
-    # Job header
+    # Job header with company information
     st.subheader(f"🎯 {job_data.get('title', 'N/A')}")
-    st.markdown(f"**🏢 Company:** {job_data.get('company', 'N/A')}")
+    
+    # Company information with enhanced display
+    company_name = job_data.get('company', 'N/A')
+    
+    # Try to get company info from job data first (for live search), then from database
+    company_info = {}
+    if job_data.get('company_size'):
+        company_info['company_size'] = job_data['company_size']
+    if job_data.get('company_followers'):
+        company_info['followers'] = job_data['company_followers']
+    if job_data.get('company_industry'):
+        company_info['industry'] = job_data['company_industry']
+    if job_data.get('company_info_link'):
+        company_info['company_url'] = job_data['company_info_link']
+    
+    # If no company info from job data, try database lookup
+    if not company_info or not any(company_info.values()):
+        company_info = get_company_info(company_name)
+    
+    if company_info and any(company_info.values()):
+        col_company1, col_company2 = st.columns([2, 3])
+        with col_company1:
+            st.markdown(f"**🏢 Company:** {company_name}")
+            if company_info.get('company_url'):
+                st.markdown(f"🔗 [Company Profile]({company_info['company_url']})")
+        
+        with col_company2:
+            company_details = []
+            if company_info.get('industry'):
+                company_details.append(f"🏭 **Industry:** {company_info['industry']}")
+            if company_info.get('company_size'):
+                company_details.append(f"👥 **Size:** {company_info['company_size']}")
+            if company_info.get('followers'):
+                followers = company_info['followers']
+                if isinstance(followers, (int, str)) and str(followers).isdigit():
+                    followers_num = int(followers)
+                    if followers_num >= 1000000:
+                        followers_str = f"{followers_num/1000000:.1f}M"
+                    elif followers_num >= 1000:
+                        followers_str = f"{followers_num/1000:.1f}K"
+                    else:
+                        followers_str = str(followers_num)
+                    company_details.append(f"👨‍💼 **Followers:** {followers_str}")
+            
+            for detail in company_details:
+                st.markdown(detail)
+    else:
+        st.markdown(f"**🏢 Company:** {company_name}")
+    
+    st.divider()
     
     # Key information in columns
     if is_cleaned:
@@ -311,14 +544,14 @@ def display_job_results(jobs_data: List, title: str, is_database_data: bool = Fa
     if is_cleaned_data:
         # Enhanced display columns for cleaned data
         display_columns = [
-            "Company", "Title", "Location", "Work Location Type", "Experience Level", 
+            "Company", "Company Info", "Title", "Location", "Work Location Type", "Experience Level", 
             "Years Experience", "Salary Range", "Employment Type", "Job Function", 
             "Industries", "Posted Time", "Applicants"
         ]
     else:
         # Original display columns
         display_columns = [
-            "Company", "Title", "Location", "Work Location Type", "Level", 
+            "Company", "Company Info", "Title", "Location", "Work Location Type", "Level", 
             "Salary Range", "Employment Type", "Job Function", 
             "Industries", "Posted Time", "Applicants"
         ]
