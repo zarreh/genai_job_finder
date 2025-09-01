@@ -297,7 +297,7 @@ class LinkedInJobParser:
             company_id = None
             company_info = None
             try:
-                company_info = self.company_parser.extract_company_info_from_job_page(soup, job_info["company"])
+                company_info = self.company_parser.extract_company_info_from_job_page(soup, job_info["company"], parsing_link)
                 if company_info:
                     company_id = self.database.save_company(company_info)
                     # Add company information to job data

@@ -2,6 +2,7 @@ import logging
 import re
 import time
 import random
+import os
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -24,18 +25,26 @@ class LinkedInCompanyParser:
     
     def _setup_session(self):
         """Setup requests session with proper headers"""
+        # Use USER_AGENT from .env if available, otherwise fallback to default
+        user_agent = os.environ.get('USER_AGENT', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36')
+        
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+            'User-Agent': user_agent,
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
         }
         self.session.headers.update(headers)
+        logger.debug(f"Using User-Agent: {user_agent[:50]}...")
     
-    def extract_company_info_from_job_page(self, soup: BeautifulSoup, company_name: str) -> Optional[Company]:
+    def extract_company_info_from_job_page(self, soup: BeautifulSoup, company_name: str, job_url: str = None) -> Optional[Company]:
         """Extract company information from a job posting page"""
         try:
             company_info = {
@@ -52,7 +61,7 @@ class LinkedInCompanyParser:
                 company_info['company_url'] = company_link
                 logger.info(f"Found company link for {company_name}: {company_link}")
                 # If we have a company link, try to get detailed info from company page
-                detailed_info = self._get_company_page_info(company_link)
+                detailed_info = self._get_company_page_info(company_link, job_url)
                 if detailed_info:
                     company_info.update(detailed_info)
             else:
@@ -269,13 +278,45 @@ class LinkedInCompanyParser:
         
         return info
     
-    def _get_company_page_info(self, company_url: str) -> Optional[dict]:
+    def _get_company_page_info(self, company_url: str, job_url: str = None) -> Optional[dict]:
         """Get detailed company information from LinkedIn company page using specific data-test-id selectors"""
         try:
             logger.info(f"Fetching company page: {company_url}")
-            response = self.session.get(company_url, timeout=15)
+            
+            # Add referrer if we have the job URL to mimic natural navigation
+            headers = {}
+            if job_url:
+                headers['Referer'] = job_url
+                logger.debug(f"Using referrer: {job_url}")
+            
+            # Add random delay to avoid rate limiting
+            delay = random.uniform(3, 7)
+            time.sleep(delay)
+            
+            response = self.session.get(company_url, headers=headers, timeout=15)
+            
+            # Check if we got a login redirect or access denied
+            if response.status_code == 403:
+                logger.warning(f"Access denied (403) for company page: {company_url}")
+                return None
+            elif response.status_code == 999:
+                logger.warning(f"LinkedIn anti-bot protection (999) for company page: {company_url}")
+                return None
+            elif response.status_code == 302 or 'authwall' in response.url.lower():
+                logger.warning(f"Login redirect detected for company page: {company_url}")
+                return None
+            
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Check if we actually got a company page (not a login page or tracking page)
+            page_text = soup.get_text()[:500]
+            if ('Sign in' in page_text or 'Join LinkedIn' in page_text or 
+                'window.onload' in response.text[:500] or len(response.text) < 5000):
+                logger.warning(f"Got login page or anti-bot page instead of company page for: {company_url}")
+                return None
+            
+            logger.info(f"Successfully accessed company page: {company_url}")
             
             info = {
                 'company_size': None,
@@ -421,7 +462,7 @@ class LinkedInCompanyParser:
                 return existing_company['id']
             
             # Extract company information
-            company = self.extract_company_info_from_job_page(soup, company_name)
+            company = self.extract_company_info_from_job_page(soup, company_name, None)
             if company:
                 company_id = self.database.save_company(company)
                 logger.info(f"Saved company information for: {company_name}")
