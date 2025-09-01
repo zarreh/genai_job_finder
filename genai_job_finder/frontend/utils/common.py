@@ -19,11 +19,17 @@ def get_time_filter_options() -> Dict[str, Optional[str]]:
 
 def get_database_path() -> str:
     """Get the path to the main database"""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
-        "data", 
-        "jobs.db"
-    )
+    # Get the project root directory by finding the directory containing pyproject.toml
+    current_dir = os.path.dirname(__file__)
+    project_root = current_dir
+    
+    # Traverse up until we find pyproject.toml
+    while project_root != os.path.dirname(project_root):  # Not at filesystem root
+        if os.path.exists(os.path.join(project_root, "pyproject.toml")):
+            break
+        project_root = os.path.dirname(project_root)
+    
+    return os.path.join(project_root, "data", "jobs.db")
 
 def setup_logging():
     """Setup logging configuration"""

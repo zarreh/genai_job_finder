@@ -1,49 +1,92 @@
 """
-Data operations module for database and search functionality
+Data operations for the frontend application
 """
-import os
 import sqlite3
-import json
 import pandas as pd
-import logging
-from typing import List, Optional, Dict, Any
-import asyncio
-import tempfile
+import streamlit as st
+import requests
 import time
-import random
+import tempfile
+import os
+import json
+import asyncio
 from datetime import datetime
+import random
+import logging
+from typing import List, Optional
 from bs4 import BeautifulSoup
 
-from ..utils.common import get_database_path
-from ...linkedin_parser.parser import LinkedInJobParser
-from ...linkedin_parser.database import DatabaseManager
-from ...data_cleaner.graph import JobCleaningGraph
-from ...data_cleaner.config import CleanerConfig
-
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from genai_job_finder.linkedin_parser.parser import LinkedInJobParser
+from genai_job_finder.linkedin_parser.database import DatabaseManager
+from genai_job_finder.linkedin_parser.company_enrichment import CompanyEnrichmentService
+from genai_job_finder.data_cleaner.config import CleanerConfig
+from genai_job_finder.data_cleaner.graph import JobCleaningGraph
+
+def get_database_path():
+    """Get the database path"""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'jobs.db')
+
 def load_jobs_from_database() -> List[dict]:
-    """Load all jobs from the database"""
+    """Load all jobs from the database with company enrichment"""
     try:
         db_path = get_database_path()
+        print(f"DEBUG: Database path: {db_path}")
         
         if not os.path.exists(db_path):
             logger.warning(f"Database not found at {db_path}")
             return []
-        
+
+        print(f"DEBUG: Database exists, creating DatabaseManager...")
         db_manager = DatabaseManager(db_path)
+        print(f"DEBUG: DatabaseManager created, calling get_all_jobs_as_dataframe...")
         df = db_manager.get_all_jobs_as_dataframe()
+        print(f"DEBUG: DataFrame shape: {df.shape}, empty: {df.empty}")
         
         if df.empty:
+            logger.warning("No jobs found in database DataFrame")
             return []
-        
+
         # Convert DataFrame to list of dictionaries
         jobs = df.to_dict('records')
-        logger.info(f"Loaded {len(jobs)} jobs from database")
-        return jobs
+        print(f"DEBUG: Converted to {len(jobs)} job records")
+        
+        # Enrich jobs that don't have company information
+        try:
+            from ...linkedin_parser.company_enrichment import CompanyEnrichmentService
+            company_service = CompanyEnrichmentService(db_path)
+            
+            enriched_jobs = []
+            for job in jobs:
+                # Check if job already has company information
+                if not job.get('company_size') and not job.get('company_followers') and not job.get('company_industry'):
+                    try:
+                        # Try to get company info from database
+                        company_info = company_service.database.get_company_by_name(job.get('company', ''))
+                        if company_info:
+                            job['company_size'] = company_info.get('company_size')
+                            job['company_followers'] = company_info.get('followers')
+                            job['company_industry'] = company_info.get('industry')
+                            job['company_info_link'] = company_info.get('company_url')
+                    except Exception as e:
+                        logger.debug(f"Could not enrich company '{job.get('company')}': {e}")
+                
+                enriched_jobs.append(job)
+            
+            logger.info(f"Loaded {len(enriched_jobs)} jobs from database")
+            return enriched_jobs
+        except ImportError as ie:
+            logger.warning(f"Could not import CompanyEnrichmentService: {ie}, returning jobs without enrichment")
+            logger.info(f"Loaded {len(jobs)} jobs from database")
+            return jobs
         
     except Exception as e:
         logger.error(f"Error loading jobs from database: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return []
 
 def load_cleaned_jobs_from_database() -> List[dict]:
@@ -73,8 +116,30 @@ def load_cleaned_jobs_from_database() -> List[dict]:
             
             # Convert DataFrame to list of dictionaries
             jobs = df.to_dict('records')
-            logger.info(f"Loaded {len(jobs)} cleaned jobs from database")
-            return jobs
+            
+            # Enrich jobs that don't have company information
+            from ...linkedin_parser.company_enrichment import CompanyEnrichmentService
+            company_service = CompanyEnrichmentService(db_path)
+            
+            enriched_jobs = []
+            for job in jobs:
+                # Check if job already has company information
+                if not job.get('company_size') and not job.get('company_followers') and not job.get('company_industry'):
+                    try:
+                        # Try to get company info from database
+                        company_info = company_service.database.get_company_by_name(job.get('company', ''))
+                        if company_info:
+                            job['company_size'] = company_info.get('company_size')
+                            job['company_followers'] = company_info.get('followers')
+                            job['company_industry'] = company_info.get('industry')
+                            job['company_info_link'] = company_info.get('company_url')
+                    except Exception as e:
+                        logger.debug(f"Could not enrich company '{job.get('company')}': {e}")
+                
+                enriched_jobs.append(job)
+            
+            logger.info(f"Loaded {len(enriched_jobs)} cleaned jobs from database")
+            return enriched_jobs
         
     except Exception as e:
         logger.error(f"Error loading cleaned jobs from database: {e}")
@@ -160,6 +225,10 @@ def search_jobs(search_query: str, location: str, max_pages: int,
         db_manager = DatabaseManager(temp_db.name)
         parser = LinkedInJobParser(database=db_manager)
         
+        # Initialize company enrichment service to use the main database for company lookup
+        main_db_path = get_database_path()
+        company_service = CompanyEnrichmentService(main_db_path)
+        
         # Step 2: Start parsing
         update_progress("🔍 Searching for job listings...", 2)
         logger.info("Starting job parsing...")
@@ -195,7 +264,7 @@ def search_jobs(search_query: str, location: str, max_pages: int,
             # Create a temporary job run
             job_run = db_manager.create_job_run(search_query, location)
             
-            # Get detailed data with progress updates
+            # Get detailed data with progress updates and company enrichment
             jobs_list = []
             for i, job_id in enumerate(job_ids, 1):
                 update_progress(f"🔄 Getting job details ({i}/{len(job_ids)})...", 5 + i)
@@ -210,8 +279,40 @@ def search_jobs(search_query: str, location: str, max_pages: int,
                                                          datetime.now().date().isoformat(), 
                                                          job_details_url, job_run.id)
                     if job_info:
+                        # Enrich company data using the main database lookup
+                        if job_info.company:
+                            try:
+                                enrichment_result = company_service.get_or_enrich_company(
+                                    job_info.company, 
+                                    job_info.company_info_link
+                                )
+                                
+                                # Get the actual company data from database using the enrichment result
+                                if enrichment_result.company_id:
+                                    enriched_company_data = company_service.database.get_company_by_name(job_info.company)
+                                    
+                                    # Debug: Print what we got from database
+                                    print(f"🔍 DB DEBUG: Company '{job_info.company}' - enriched_company_data: {enriched_company_data}")
+                                    
+                                    # Update the job object with enriched company information
+                                    if enriched_company_data:
+                                        job_info.company_size = enriched_company_data.get('company_size')
+                                        job_info.company_followers = enriched_company_data.get('followers')
+                                        job_info.company_industry = enriched_company_data.get('industry')
+                                        job_info.company_id = enriched_company_data.get('id')
+                                        
+                                        # Debug: Print what we assigned to job_info
+                                        print(f"🔍 JOB DEBUG: Assigned to job_info - size: {job_info.company_size}, followers: {job_info.company_followers}, industry: {job_info.company_industry}")
+                                
+                                # Company data is now saved to main database
+                                logger.info(f"Company '{job_info.company}' enriched/retrieved successfully")
+                            except Exception as company_error:
+                                logger.warning(f"Failed to enrich company '{job_info.company}': {company_error}")
+                                print(f"🔍 ERROR DEBUG: Company enrichment failed for '{job_info.company}': {company_error}")
+                        
                         jobs_list.append(job_info)
                         # Save individual job to database
+                        print(f"🔍 SAVE DEBUG: Saving job '{job_info.title}' at '{job_info.company}' with company data: size={job_info.company_size}, followers={job_info.company_followers}, industry={job_info.company_industry}")
                         db_manager.save_job(job_info)
                     
                     time.sleep(random.uniform(1, 3))
@@ -224,7 +325,12 @@ def search_jobs(search_query: str, location: str, max_pages: int,
             update_progress(f"⚙️ Processing {len(jobs_list)} job details...", 6)
             
             # Convert Job objects to dict format for display
-            jobs_dict = [job.to_dict() for job in jobs_list]
+            jobs_dict = []
+            for job in jobs_list:
+                job_dict = job.to_dict()
+                # Debug: Check what company info is in the dict
+                print(f"🔍 DICT DEBUG: Job '{job.title}' at '{job.company}' - dict company fields: size={job_dict.get('company_size')}, followers={job_dict.get('company_followers')}, industry={job_dict.get('company_industry')}")
+                jobs_dict.append(job_dict)
             
             logger.info(f"Found {len(jobs_dict)} jobs from parsing")
             

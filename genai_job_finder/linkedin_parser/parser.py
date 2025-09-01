@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from .models import Job, JobType, ExperienceLevel
 from .database import DatabaseManager
+from .company_parser import LinkedInCompanyParser
 from ..legacy.utils import text_clean
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ class LinkedInJobParser:
     
     def __init__(self, database: Optional[DatabaseManager] = None):
         self.database = database or DatabaseManager()
+        self.company_parser = LinkedInCompanyParser(self.database)
         self.session = requests.Session()
         self._setup_session()
     
@@ -291,6 +293,96 @@ class LinkedInJobParser:
             # Work location type (Remote/Hybrid/On-site) detection
             job_info["work_location_type"] = self._determine_work_location_type(soup, job_info.get("location", ""))
             
+            # Get or enrich company information using lookup-first approach
+            company_id = None
+            try:
+                # First, check if company exists in database
+                existing_company = self.database.get_company_by_name(job_info["company"])
+                
+                if existing_company:
+                    # Company exists - use existing data
+                    company_id = existing_company['id']
+                    job_info["company_size"] = existing_company.get('company_size')
+                    job_info["company_followers"] = existing_company.get('followers')
+                    job_info["company_industry"] = existing_company.get('industry')
+                    job_info["company_info_link"] = existing_company.get('company_url')
+                    logger.debug(f"Using existing company data for: {job_info['company']}")
+                    
+                    # Only parse company info if the existing record lacks key information
+                    needs_enrichment = not any([
+                        existing_company.get('company_size'),
+                        existing_company.get('followers'),
+                        existing_company.get('industry'),
+                        existing_company.get('company_url')
+                    ])
+                    
+                    if needs_enrichment:
+                        logger.debug(f"Company {job_info['company']} needs enrichment, parsing...")
+                        try:
+                            company_info = self.company_parser.extract_company_info_from_job_page(soup, job_info["company"])
+                            if company_info:
+                                # Update the existing company with new information
+                                updated_company_id = self.database.save_company(company_info)
+                                job_info["company_size"] = company_info.company_size
+                                job_info["company_followers"] = company_info.followers
+                                job_info["company_industry"] = company_info.industry
+                                job_info["company_info_link"] = company_info.company_url
+                                logger.info(f"Enriched existing company: {job_info['company']}")
+                        except Exception as e:
+                            logger.warning(f"Failed to enrich existing company {job_info['company']}: {e}")
+                            # Keep existing (potentially incomplete) data
+                else:
+                    # Company doesn't exist - create and potentially enrich
+                    logger.debug(f"Creating new company record for: {job_info['company']}")
+                    try:
+                        company_info = self.company_parser.extract_company_info_from_job_page(soup, job_info["company"])
+                        if company_info:
+                            # Save enriched company information
+                            company_id = self.database.save_company(company_info)
+                            job_info["company_size"] = company_info.company_size
+                            job_info["company_followers"] = company_info.followers
+                            job_info["company_industry"] = company_info.industry
+                            job_info["company_info_link"] = company_info.company_url
+                            logger.info(f"Created and enriched new company: {job_info['company']}")
+                        else:
+                            # Create basic company record
+                            from .models import Company
+                            basic_company = Company(company_name=job_info["company"])
+                            company_id = self.database.save_company(basic_company)
+                            job_info["company_size"] = None
+                            job_info["company_followers"] = None
+                            job_info["company_industry"] = None
+                            job_info["company_info_link"] = None
+                            logger.debug(f"Created basic company record: {job_info['company']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to extract company info for {job_info['company']}: {e}")
+                        # Create basic company record as fallback
+                        from .models import Company
+                        basic_company = Company(company_name=job_info["company"])
+                        company_id = self.database.save_company(basic_company)
+                        job_info["company_size"] = None
+                        job_info["company_followers"] = None
+                        job_info["company_industry"] = None
+                        job_info["company_info_link"] = None
+                        
+            except Exception as e:
+                logger.error(f"Error processing company info for {job_info['company']}: {e}")
+                # Create basic company record as final fallback
+                try:
+                    from .models import Company
+                    basic_company = Company(company_name=job_info["company"])
+                    company_id = self.database.save_company(basic_company)
+                except Exception as e2:
+                    logger.error(f"Failed to create basic company record: {e2}")
+                    company_id = None
+                # Set default values
+                job_info["company_size"] = None
+                job_info["company_followers"] = None
+                job_info["company_industry"] = None
+                job_info["company_info_link"] = None
+            
+            job_info["company_id"] = company_id
+            
             # Job criteria (level, employment_type, job_function, industries)
             try:
                 criteria_list = soup.find(
@@ -388,7 +480,12 @@ class LinkedInJobParser:
                 date=date,
                 parsing_link=parsing_link,
                 job_posting_link=job_info["job_posting_link"],
-                run_id=run_id
+                run_id=run_id,
+                company_id=company_id,
+                company_size=job_info["company_size"],
+                company_followers=job_info["company_followers"],
+                company_industry=job_info["company_industry"],
+                company_info_link=job_info["company_info_link"]
             )
             
             return job
