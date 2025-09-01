@@ -186,10 +186,6 @@ class DatabaseManager:
             # Convert job to dict for database insertion
             job_data = job.to_dict()
             
-            # Debug logging to trace company_info_link values
-            logger.info(f"Saving job {job_data.get('title', 'N/A')} for company {job_data.get('company', 'N/A')}")
-            logger.info(f"company_info_link value: {job_data.get('company_info_link', 'NOT_SET')}")
-            
             # Define the INSERT query
             query = """
                 INSERT INTO jobs (

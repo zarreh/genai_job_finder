@@ -305,8 +305,7 @@ class LinkedInJobParser:
                     job_info["company_followers"] = company_info.followers
                     job_info["company_industry"] = company_info.industry
                     job_info["company_info_link"] = company_info.company_url
-                    logger.info(f"Company info extracted for: {job_info['company']}")
-                    logger.info(f"Setting company_info_link to: {company_info.company_url}")
+                    logger.debug(f"Company info extracted for: {job_info['company']}")
                 else:
                     # Try to get existing company info from database
                     existing_company = self.database.get_company_by_name(job_info["company"])

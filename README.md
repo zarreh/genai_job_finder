@@ -31,7 +31,7 @@ poetry run python run_parser.py --search-query "data scientist" --location "San 
 ```ts jobs AND company intelligence
 - **🏢 Integrated Company Intelligence**: Automatic extraction of company size, followers, and industry with smart rate limiting (5-10s delays)
 - **�️ Built-in Rate Limiting**: No more LinkedIn blocks - intelligent delays prevent rate limiting
-- **📊 20-Column Enhanced Output**: Complete job and company data in one pass  
+- **📊 21-Column Enhanced Output**: Complete job and company data in one pass  
 - **🌍 Location Intelligence**: Automatic location extraction and work type classification (Remote/Hybrid/On-site)
 - **🤖 AI-Powered Data Cleaning**: Advanced job data enhancement with experience analysis, salary extraction, and field validation
 - **💰 Smart Salary Processing**: AI-powered salary range extraction and normalization
@@ -39,7 +39,7 @@ poetry run python run_parser.py --search-query "data scientist" --location "San 
 - **🔧 Streamlined Architecture**: Consolidated commands - no more multi-step processes
 - **🖥️ Enhanced Web Frontend**: Multi-tab Streamlit interface with AI-enhanced job browsing
 - **💾 Database Storage**: SQLite database with automatic migration support
-- **📤 Automatic CSV Export**: Enhanced data export with all 20 columns
+- **📤 Automatic CSV Export**: Enhanced data export with all 21 columns
 - **📈 Progress Tracking**: Visual progress bars and detailed statistics
 
 ## 📋 Requirements
@@ -101,7 +101,7 @@ poetry run python run_parser.py --search-query "data scientist" --total-jobs 50
 
 **All methods will:**
 - 💾 Store results in SQLite database (`data/jobs.db`)
-- 📤 Export to CSV (`data/jobs_export.csv`) with all 20 columns
+- 📤 Export to CSV (`data/jobs_export.csv`) with all 21 columns
 - 📊 Display progress with visual indicators
 - 🎯 Apply location and company intelligence automatically
 
@@ -113,6 +113,7 @@ The integrated company intelligence provides **significant data enrichment** in 
 - **👥 Company Size**: 55-70% of jobs (e.g., "10,001+ employees", "51-200 employees")
 - **📊 Company Followers**: 55-70% of jobs (e.g., "10,274,592 followers") 
 - **🏭 Company Industry**: 10-15% of jobs (e.g., "Software Development", "IT Services")
+- **🔗 Company LinkedIn URL**: 60-80% of jobs (e.g., "https://www.linkedin.com/company/microsoft")
 - **🏠 Work Location Type**: 100% classification (Remote/Hybrid/On-site)
 
 ### 🎯 **No Manual Fixing Needed**:
@@ -208,7 +209,7 @@ The frontend has been **refactored into a modular structure** for better maintai
 
 ## 📊 Enhanced Data Structure
 
-The parser produces **20 columns** of comprehensive job data, including automatic company information extraction:
+The parser produces **21 columns** of comprehensive job data, including automatic company information extraction:
 
 ### 🔧 Core Job Information (Legacy Compatible)
 | Column | Description | Example |
@@ -241,6 +242,7 @@ The parser produces **20 columns** of comprehensive job data, including automati
 | `company_size` | Number of employees | `1,000-5,000 employees` |
 | `company_followers` | LinkedIn followers | `150,000 followers` |
 | `company_industry` | Company industry | `Computer Software` |
+| `company_info_link` | LinkedIn company page URL | `https://www.linkedin.com/company/microsoft` |
 
 ## 🤖 Programmatic Usage
 
