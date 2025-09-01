@@ -1,41 +1,77 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend run-company-enrichment show-company-stats test clean
+.PHONY: help install run-parser run-pipeline run-cleaner run-frontend test clean
 
 # Default target
 help:
 	@echo "Available targets:"
 	@echo "  install              - Install dependencies using Poetry"
-	@echo "  run-parser           - Run the LinkedIn job parser (simple script)"
-	@echo "  run-parser-mod       - Run the LinkedIn job parser (as module)"
+	@echo "  run-parser           - Run comprehensive LinkedIn parser with company intelligence"
 	@echo "  run-pipeline         - Run parser + data cleaner pipeline (full processing)"
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
 	@echo "  run-frontend         - Run the frontend application with AI features"
-	@echo "  run-company-enrichment - Enrich companies with detailed information"
-	@echo "  show-company-stats   - Show company enrichment statistics"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
+	@echo ""
+	@echo "Advanced options:"
+	@echo "  make run-parser QUERY='software engineer' LOCATION='Austin' JOBS=100"
+	@echo "  make run-parser REMOTE=true PARTTIME=true"
 
 # Install dependencies
 install:
 	poetry install
 
-# Run the LinkedIn parser (simple script)
+# Run comprehensive LinkedIn parser with integrated company intelligence
 run-parser:
-	poetry run python run_parser.py
-
-# Run the LinkedIn parser (as module)
-run-parser-mod:
-	poetry run python -m genai_job_finder.linkedin_parser.run_parser
+	@echo "🚀 COMPREHENSIVE LINKEDIN JOB PARSER"
+	@echo "======================================"
+	@echo "✨ Features:"
+	@echo "   🎯 Job data extraction (20-column output)"
+	@echo "   🏢 Company intelligence (size, followers, industry)"
+	@echo "   📍 Location intelligence & work type classification"
+	@echo "   🛡️ Smart rate limiting (5-10s delays)"
+	@echo "   📤 Automatic CSV export"
+	@echo ""
+	@if [ "$(QUERY)" != "" ]; then \
+		echo "🔍 Custom search query: $(QUERY)"; \
+		ARGS="--search-query '$(QUERY)'"; \
+	else \
+		ARGS=""; \
+	fi; \
+	if [ "$(LOCATION)" != "" ]; then \
+		echo "📍 Custom location: $(LOCATION)"; \
+		ARGS="$$ARGS --location '$(LOCATION)'"; \
+	fi; \
+	if [ "$(JOBS)" != "" ]; then \
+		echo "📊 Custom job count: $(JOBS)"; \
+		ARGS="$$ARGS --total-jobs $(JOBS)"; \
+	fi; \
+	if [ "$(REMOTE)" = "true" ]; then \
+		echo "🏠 Including remote jobs"; \
+		ARGS="$$ARGS --remote"; \
+	fi; \
+	if [ "$(PARTTIME)" = "true" ]; then \
+		echo "⏰ Including part-time jobs"; \
+		ARGS="$$ARGS --parttime"; \
+	fi; \
+	echo ""; \
+	echo "🚀 Starting parser..."; \
+	poetry run python run_parser.py $$ARGS
 
 # Run full pipeline: parser + data cleaner
 run-pipeline:
-	@echo "🚀 Running full processing pipeline..."
-	@echo "📥 Step 1: Running LinkedIn parser..."
-	poetry run python run_parser.py
-	@echo "🧹 Step 2: Running AI data cleaner..."
+	@echo "🚀 FULL PROCESSING PIPELINE"
+	@echo "============================"
+	@echo "📥 Step 1: Comprehensive LinkedIn parsing with company intelligence"
+	@$(MAKE) run-parser
+	@echo ""
+	@echo "🧹 Step 2: AI-powered data cleaning and enhancement"
 	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose
-	@echo "✅ Pipeline complete! Check data/jobs.db for results."
+	@echo ""
+	@echo "✅ PIPELINE COMPLETE!"
+	@echo "💾 Results in data/jobs.db (raw + cleaned tables)"
+	@echo "📤 CSV exports available in data/ folder"
+	@echo "📊 Analyze: notebooks/job_analysis.ipynb"
 
 # Run data cleaner only
 run-cleaner:
@@ -44,10 +80,11 @@ run-cleaner:
 
 # Run the frontend application with AI features
 run-frontend:
-	@echo "🚀 Starting GenAI Job Finder Frontend..."
+	@echo "🚀 GENAI JOB FINDER FRONTEND"
+	@echo "============================"
 	@echo "📊 Features:"
 	@echo "  - Live LinkedIn job search with automatic AI enhancement"
-	@echo "  - Stored job database browsing"
+	@echo "  - Stored job database browsing with company intelligence"
 	@echo "  - 🤖 AI-enhanced job data with cleaning"
 	@echo "  - Enhanced filtering and display"
 	@echo ""
@@ -60,8 +97,7 @@ run-frontend:
 		echo "   Start Ollama to enable full functionality"; \
 	fi
 	@echo ""
-	@echo "🌟 Starting frontend..."
-	@echo "📱 Access at: http://localhost:8501"
+	@echo "🌟 Starting frontend at http://localhost:8501"
 	@echo "💡 Use Ctrl+C to stop"
 	@echo ""
 	@export PYTHONPATH="${PYTHONPATH}:$(PWD)" && \
@@ -71,22 +107,6 @@ run-frontend:
 		--server.headless true \
 		--browser.gatherUsageStats false \
 		--logger.level info
-
-# Run company enrichment to add detailed company information
-run-company-enrichment:
-	@echo "🏢 Starting company information enrichment..."
-	@echo "📊 This will add company size, followers, and industry data"
-	@echo ""
-	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --create-missing
-	@echo "🔍 Enriching companies with detailed information..."
-	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --limit 20
-	@echo "✅ Company enrichment complete!"
-
-# Show company statistics
-show-company-stats:
-	@echo "📊 Company Database Statistics"
-	@echo "=============================="
-	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --show-missing
 
 # Run tests
 test:

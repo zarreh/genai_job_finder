@@ -107,7 +107,7 @@ class LinkedInCompanyParser:
             return None
     
     def _extract_company_info_from_job_page_content(self, soup: BeautifulSoup) -> dict:
-        """Extract company info directly from job page content"""
+        """Extract company info directly from job page content using LinkedIn's specific data-test-id attributes"""
         info = {
             'company_size': None,
             'followers': None,
@@ -115,45 +115,125 @@ class LinkedInCompanyParser:
         }
         
         try:
-            # Look for company size patterns in the page text
-            page_text = soup.get_text()
+            # PRIORITY 1: Use LinkedIn's specific data-test-id selectors (most reliable)
+            logger.debug("Attempting extraction using LinkedIn data-test-id selectors...")
             
-            # Company size patterns
-            size_patterns = [
-                r'(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees?',
-                r'(\d+(?:\.\d+)?[KMB]?)\s+employees?',
-                r'Company size[:\s]*(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees?'
+            # Company size from data-test-id="about-us__size"
+            size_section = soup.find(attrs={"data-test-id": "about-us__size"})
+            if size_section:
+                size_dd = size_section.find("dd")
+                if size_dd:
+                    size_text = size_dd.get_text().strip()
+                    # Clean up the text and extract meaningful size info
+                    if size_text and len(size_text) > 0:
+                        info['company_size'] = size_text
+                        logger.debug(f"Found company size via data-test-id: {size_text}")
+            
+            # Industry from data-test-id="about-us__industry" 
+            industry_section = soup.find(attrs={"data-test-id": "about-us__industry"})
+            if industry_section:
+                industry_dd = industry_section.find("dd")
+                if industry_dd:
+                    industry_text = industry_dd.get_text().strip()
+                    if industry_text and len(industry_text) > 2:
+                        info['industry'] = industry_text
+                        logger.debug(f"Found industry via data-test-id: {industry_text}")
+            
+            # PRIORITY 2: Face-pile exact employee count (more precise than ranges)
+            if not info['company_size'] or "employees" not in info['company_size']:
+                face_pile_elements = soup.select(".face-pile__text")
+                for element in face_pile_elements:
+                    text = element.get_text().strip()
+                    # Look for "View all X employees" pattern
+                    match = re.search(r'View all ([\d,]+) employees?', text, re.IGNORECASE)
+                    if match:
+                        count = match.group(1).replace(',', '')
+                        info['company_size'] = f"{count} employees"
+                        logger.debug(f"Found exact employee count via face-pile: {count}")
+                        break
+            
+            # PRIORITY 3: Followers from h3 elements or follower-specific selectors
+            follower_selectors = [
+                "h3",  # User mentioned h3 elements contain follower info
+                "[data-tracking-control-name*='follower']",
+                ".org-top-card-summary__follower-count", 
+                "*[class*='follower']"
             ]
             
-            for pattern in size_patterns:
-                match = re.search(pattern, page_text, re.IGNORECASE)
-                if match:
-                    info['company_size'] = f"{match.group(1)} employees"
-                    break
+            for selector in follower_selectors:
+                try:
+                    elements = soup.select(selector)
+                    for element in elements:
+                        text = element.get_text().strip()
+                        # Look for follower patterns
+                        match = re.search(r'([\d,]+(?:\.\d+)?[KMB]?)\s+followers?', text, re.IGNORECASE)
+                        if match:
+                            info['followers'] = f"{match.group(1)} followers"
+                            logger.debug(f"Found followers via {selector}: {match.group(1)}")
+                            break
+                    if info['followers']:
+                        break
+                except Exception as e:
+                    logger.debug(f"Error with follower selector {selector}: {e}")
+                    continue
             
-            # Followers patterns
-            follower_patterns = [
-                r'(\d{1,3}(?:,\d{3})*(?:\.\d+)?[KMB]?)\s+followers?',
-                r'(\d+(?:\.\d+)?[KMB]?)\s+followers?'
+            # PRIORITY 4: Fallback patterns for any missed data
+            if not info['company_size'] or not info['followers']:
+                page_text = soup.get_text()
+                
+                # Company size fallback patterns
+                if not info['company_size']:
+                    size_patterns = [
+                        r'View all ([\d,]+) employees?',
+                        r'(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees?',
+                        r'(\d+(?:\.\d+)?[KMB]?)\s+employees?',
+                        r'Company size[:\s]*(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees?'
+                    ]
+                    
+                    for pattern in size_patterns:
+                        match = re.search(pattern, page_text, re.IGNORECASE)
+                        if match:
+                            count = match.group(1).replace(',', '')
+                            info['company_size'] = f"{count} employees"
+                            logger.debug(f"Found employee count via fallback pattern: {count}")
+                            break
+                
+                # Followers fallback patterns
+                if not info['followers']:
+                    follower_patterns = [
+                        r'([\d,]+(?:\.\d+)?[KMB]?)\s+followers?',
+                        r'Follow[^0-9]*([\d,]+(?:\.\d+)?[KMB]?)\s+followers?'
+                    ]
+                    
+                    for pattern in follower_patterns:
+                        match = re.search(pattern, page_text, re.IGNORECASE)
+                        if match:
+                            info['followers'] = f"{match.group(1)} followers"
+                            logger.debug(f"Found followers via fallback pattern: {match.group(1)}")
+                            break
+            
+            # PRIORITY 5: Additional LinkedIn-specific data-test-id attributes for comprehensive extraction
+            # Check for other useful company info
+            additional_selectors = [
+                ("about-us__headquarters", "headquarters"),
+                ("about-us__organizationType", "organization_type"), 
+                ("about-us__foundedOn", "founded"),
+                ("about-us__specialties", "specialties")
             ]
             
-            for pattern in follower_patterns:
-                match = re.search(pattern, page_text, re.IGNORECASE)
-                if match:
-                    info['followers'] = f"{match.group(1)} followers"
-                    break
-            
-            # Try to extract industry from job criteria if available
-            try:
-                industries_elem = soup.find("li", string=re.compile("Industries", re.IGNORECASE))
-                if industries_elem:
-                    # Get the next text content which should be the industry
-                    industry_text = industries_elem.get_text()
-                    industry = industry_text.replace("Industries", "").strip()
-                    if industry:
-                        info['industry'] = industry
-            except:
-                pass
+            for test_id, field_name in additional_selectors:
+                try:
+                    section = soup.find(attrs={"data-test-id": test_id})
+                    if section:
+                        dd_element = section.find("dd")
+                        if dd_element:
+                            value = dd_element.get_text().strip()
+                            if value:
+                                logger.debug(f"Found {field_name} via data-test-id: {value}")
+                                # We could store these in future expansion
+                except Exception as e:
+                    logger.debug(f"Error extracting {field_name}: {e}")
+                    continue
             
         except Exception as e:
             logger.warning(f"Error extracting company info from job page: {e}")
@@ -161,7 +241,7 @@ class LinkedInCompanyParser:
         return info
     
     def _get_company_page_info(self, company_url: str) -> Optional[dict]:
-        """Get detailed company information from LinkedIn company page"""
+        """Get detailed company information from LinkedIn company page using specific data-test-id selectors"""
         try:
             logger.info(f"Fetching company page: {company_url}")
             response = self.session.get(company_url, timeout=15)
@@ -174,41 +254,127 @@ class LinkedInCompanyParser:
                 'industry': None
             }
             
-            # Extract company size
-            size_element = soup.find(string=re.compile(r'\d+(?:-\d+)?\s+employees?', re.IGNORECASE))
-            if size_element:
-                size_match = re.search(r'(\d+(?:-\d+)?)\s+employees?', size_element, re.IGNORECASE)
-                if size_match:
-                    info['company_size'] = f"{size_match.group(1)} employees"
+            # PRIORITY 1: Use LinkedIn's specific data-test-id selectors (most reliable)
+            logger.debug("Attempting company page extraction using LinkedIn data-test-id selectors...")
             
-            # Extract followers
-            followers_element = soup.find(string=re.compile(r'\d+(?:\.\d+)?[KMB]?\s+followers?', re.IGNORECASE))
-            if followers_element:
-                followers_match = re.search(r'(\d+(?:\.\d+)?[KMB]?)\s+followers?', followers_element, re.IGNORECASE)
-                if followers_match:
-                    info['followers'] = f"{followers_match.group(1)} followers"
+            # Company size from data-test-id="about-us__size"
+            size_section = soup.find(attrs={"data-test-id": "about-us__size"})
+            if size_section:
+                size_dd = size_section.find("dd")
+                if size_dd:
+                    size_text = size_dd.get_text().strip()
+                    if size_text and len(size_text) > 0:
+                        info['company_size'] = size_text
+                        logger.debug(f"Found company size via data-test-id: {size_text}")
             
-            # Extract industry
-            # Look for industry information in various selectors
-            industry_selectors = [
-                ".org-top-card-summary__industry",
-                "[data-test='company-industry']",
-                ".org-about-company-module__company-size-definition-term:contains('Industry') + dd"
+            # Industry from data-test-id="about-us__industry"
+            industry_section = soup.find(attrs={"data-test-id": "about-us__industry"})
+            if industry_section:
+                industry_dd = industry_section.find("dd")
+                if industry_dd:
+                    industry_text = industry_dd.get_text().strip()
+                    if industry_text and len(industry_text) > 2:
+                        info['industry'] = industry_text
+                        logger.debug(f"Found industry via data-test-id: {industry_text}")
+            
+            # PRIORITY 2: Face-pile exact employee count (if data-test-id didn't work or for more precise count)
+            if not info['company_size'] or "employees" not in info['company_size']:
+                face_pile_elements = soup.select(".face-pile__text")
+                for element in face_pile_elements:
+                    text = element.get_text().strip()
+                    # Look for "View all X employees" pattern
+                    match = re.search(r'View all ([\d,]+) employees?', text, re.IGNORECASE)
+                    if match:
+                        count = match.group(1).replace(',', '')
+                        info['company_size'] = f"{count} employees"
+                        logger.debug(f"Found exact employee count via face-pile: {count}")
+                        break
+            
+            # PRIORITY 3: Followers from h3 elements and other follower selectors
+            follower_selectors = [
+                "h3",  # User mentioned h3 elements contain follower info
+                "[data-tracking-control-name*='follower']",
+                ".org-top-card-summary__follower-count",
+                "*[class*='follower']",
+                ".artdeco-button--secondary"
             ]
             
-            for selector in industry_selectors:
+            for selector in follower_selectors:
                 try:
-                    element = soup.select_one(selector)
-                    if element:
-                        industry = element.get_text().strip()
-                        if industry and len(industry) > 2:
-                            info['industry'] = industry
+                    elements = soup.select(selector)
+                    for element in elements:
+                        text = element.get_text().strip()
+                        match = re.search(r'([\d,]+(?:\.\d+)?[KMB]?)\s+followers?', text, re.IGNORECASE)
+                        if match:
+                            info['followers'] = f"{match.group(1)} followers"
+                            logger.debug(f"Found followers via {selector}: {match.group(1)}")
                             break
-                except:
+                    if info['followers']:
+                        break
+                except Exception as e:
+                    logger.debug(f"Error with follower selector {selector}: {e}")
                     continue
             
-            # Add delay to be respectful
-            time.sleep(random.uniform(2, 4))
+            # PRIORITY 4: Fallback extraction if data-test-id selectors didn't work
+            if not info['company_size'] or not info['followers'] or not info['industry']:
+                page_text = soup.get_text()
+                
+                # Company size fallback
+                if not info['company_size']:
+                    size_patterns = [
+                        r'View all ([\d,]+) employees?',
+                        r'(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)\s+employees?',
+                        r'Company size[:\s]*(\d{1,3}(?:,\d{3})*(?:-\d{1,3}(?:,\d{3})*)?)',
+                        r'(\d+(?:\.\d+)?[KMB]?)\s+employees?'
+                    ]
+                    
+                    for pattern in size_patterns:
+                        match = re.search(pattern, page_text, re.IGNORECASE)
+                        if match:
+                            count = match.group(1).replace(',', '')
+                            info['company_size'] = f"{count} employees"
+                            logger.debug(f"Found company size via fallback pattern: {count}")
+                            break
+                
+                # Followers fallback
+                if not info['followers']:
+                    followers_patterns = [
+                        r'([\d,]+(?:\.\d+)?[KMB]?)\s+followers?',
+                        r'Follow[^0-9]*([\d,]+(?:\.\d+)?[KMB]?)\s+followers?'
+                    ]
+                    
+                    for pattern in followers_patterns:
+                        match = re.search(pattern, page_text, re.IGNORECASE)
+                        if match:
+                            info['followers'] = f"{match.group(1)} followers"
+                            logger.debug(f"Found followers via fallback pattern: {match.group(1)}")
+                            break
+                
+                # Industry fallback
+                if not info['industry']:
+                    # Try old-style industry selectors as fallback
+                    industry_selectors = [
+                        ".org-top-card-summary__industry",
+                        "[data-test='company-industry']",
+                        "*[class*='industry']"
+                    ]
+                    
+                    for selector in industry_selectors:
+                        try:
+                            element = soup.select_one(selector)
+                            if element:
+                                industry = element.get_text().strip()
+                                if not re.search(r'\d+\s+(employees?|followers?)', industry, re.IGNORECASE):
+                                    if industry and len(industry) > 2 and len(industry) < 100:
+                                        info['industry'] = industry
+                                        logger.debug(f"Found industry via fallback {selector}: {industry}")
+                                        break
+                        except Exception as e:
+                            logger.debug(f"Error with fallback industry selector {selector}: {e}")
+                            continue
+            
+            # Add longer delay to be more respectful and avoid rate limiting
+            time.sleep(random.uniform(5, 10))
             
             return info if any(info.values()) else None
             
