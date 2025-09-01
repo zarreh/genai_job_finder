@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from .models import Job, JobType, ExperienceLevel
 from .database import DatabaseManager
+from .company_parser import LinkedInCompanyParser
 from ..legacy.utils import text_clean
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ class LinkedInJobParser:
     
     def __init__(self, database: Optional[DatabaseManager] = None):
         self.database = database or DatabaseManager()
+        self.company_parser = LinkedInCompanyParser(self.database)
         self.session = requests.Session()
         self._setup_session()
     
@@ -291,6 +293,43 @@ class LinkedInJobParser:
             # Work location type (Remote/Hybrid/On-site) detection
             job_info["work_location_type"] = self._determine_work_location_type(soup, job_info.get("location", ""))
             
+            # Extract and save company information
+            company_id = None
+            company_info = None
+            try:
+                company_info = self.company_parser.extract_company_info_from_job_page(soup, job_info["company"])
+                if company_info:
+                    company_id = self.database.save_company(company_info)
+                    # Add company information to job data
+                    job_info["company_size"] = company_info.company_size
+                    job_info["company_followers"] = company_info.followers
+                    job_info["company_industry"] = company_info.industry
+                    logger.debug(f"Company info extracted for: {job_info['company']}")
+                else:
+                    # Try to get existing company info from database
+                    existing_company = self.database.get_company_by_name(job_info["company"])
+                    if existing_company:
+                        company_id = existing_company['id']
+                        job_info["company_size"] = existing_company.get('company_size')
+                        job_info["company_followers"] = existing_company.get('followers')
+                        job_info["company_industry"] = existing_company.get('industry')
+                    else:
+                        # Create basic company record
+                        from .models import Company
+                        basic_company = Company(company_name=job_info["company"])
+                        company_id = self.database.save_company(basic_company)
+                        job_info["company_size"] = None
+                        job_info["company_followers"] = None
+                        job_info["company_industry"] = None
+            except Exception as e:
+                logger.warning(f"Error processing company info for {job_info['company']}: {e}")
+                # Set default values
+                job_info["company_size"] = None
+                job_info["company_followers"] = None
+                job_info["company_industry"] = None
+            
+            job_info["company_id"] = company_id
+            
             # Job criteria (level, employment_type, job_function, industries)
             try:
                 criteria_list = soup.find(
@@ -388,7 +427,11 @@ class LinkedInJobParser:
                 date=date,
                 parsing_link=parsing_link,
                 job_posting_link=job_info["job_posting_link"],
-                run_id=run_id
+                run_id=run_id,
+                company_id=company_id,
+                company_size=job_info["company_size"],
+                company_followers=job_info["company_followers"],
+                company_industry=job_info["company_industry"]
             )
             
             return job

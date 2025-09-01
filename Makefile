@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend test clean
+.PHONY: help install run-parser run-parser-mod run-pipeline run-cleaner run-frontend run-company-enrichment show-company-stats test clean
 
 # Default target
 help:
@@ -11,6 +11,8 @@ help:
 	@echo "  run-pipeline         - Run parser + data cleaner pipeline (full processing)"
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
 	@echo "  run-frontend         - Run the frontend application with AI features"
+	@echo "  run-company-enrichment - Enrich companies with detailed information"
+	@echo "  show-company-stats   - Show company enrichment statistics"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
 
@@ -69,6 +71,22 @@ run-frontend:
 		--server.headless true \
 		--browser.gatherUsageStats false \
 		--logger.level info
+
+# Run company enrichment to add detailed company information
+run-company-enrichment:
+	@echo "🏢 Starting company information enrichment..."
+	@echo "📊 This will add company size, followers, and industry data"
+	@echo ""
+	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --create-missing
+	@echo "🔍 Enriching companies with detailed information..."
+	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --limit 20
+	@echo "✅ Company enrichment complete!"
+
+# Show company statistics
+show-company-stats:
+	@echo "📊 Company Database Statistics"
+	@echo "=============================="
+	poetry run python genai_job_finder/linkedin_parser/company_enrichment.py --show-missing
 
 # Run tests
 test:

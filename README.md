@@ -5,8 +5,9 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 ## 🚀 Key Features
 
 - **🎯 Enhanced LinkedIn Job Scraping**: Completely rewritten parser with location intelligence
+- **🏢 Automatic Company Information Extraction**: Company size, followers, and industry data for each job
 - **🤖 AI-Powered Data Cleaning**: Advanced job data enhancement with experience analysis, salary extraction, and field validation
-- **📊 17-Column Data Structure**: Maintains exact legacy output format compatibility  
+- **📊 20-Column Data Structure**: Enhanced output with company information while maintaining legacy compatibility  
 - **🌍 Location Intelligence**: Automatic location extraction and work type classification (Remote/Hybrid/On-site)
 - **💰 Smart Salary Processing**: AI-powered salary range extraction and normalization
 - **🎓 Experience Classification**: Automatic experience level categorization (Entry level → Junior → Associate/Early career → Mid-level → Senior → Staff/Principal/Lead → Director/VP/Executive)
@@ -14,7 +15,7 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 - **⚡ Multiple Execution Methods**: Run as simple script, Python module, or programmatically
 - **🖥️ Enhanced Web Frontend**: Multi-tab Streamlit interface with AI-enhanced job browsing and complete parse & clean pipeline
 - **💾 Database Storage**: SQLite database with automatic migration support
-- **📤 CSV Export**: Export job data with all enhanced fields
+- **📤 CSV Export**: Export job data with all enhanced fields including company information
 - **🛠️ Easy Execution**: Comprehensive Makefile for simplified command execution
 - **📈 Progress Tracking**: Visual progress bars and detailed status reporting
 
@@ -160,7 +161,7 @@ The frontend has been **refactored into a modular structure** for better maintai
 
 ## 📊 Enhanced Data Structure
 
-The parser produces **17 columns** of comprehensive job data, maintaining full legacy compatibility:
+The parser produces **20 columns** of comprehensive job data, including automatic company information extraction:
 
 ### 🔧 Core Job Information (Legacy Compatible)
 | Column | Description | Example |
@@ -186,6 +187,13 @@ The parser produces **17 columns** of comprehensive job data, maintaining full l
 |--------|-------------|---------|
 | `location` | Extracted location | `San Francisco, CA` |
 | `work_location_type` | AI-classified work type | `Remote`, `Hybrid`, `On-site` |
+
+### 🏢 Company Information (Auto-Extracted)
+| Column | Description | Example |
+|--------|-------------|---------|
+| `company_size` | Number of employees | `1,000-5,000 employees` |
+| `company_followers` | LinkedIn followers | `150,000 followers` |
+| `company_industry` | Company industry | `Computer Software` |
 
 ## 🤖 Programmatic Usage
 
