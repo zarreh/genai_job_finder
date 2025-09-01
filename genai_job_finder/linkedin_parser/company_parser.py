@@ -50,20 +50,24 @@ class LinkedInCompanyParser:
             company_link = self._extract_company_link(soup)
             if company_link:
                 company_info['company_url'] = company_link
+                logger.info(f"Found company link for {company_name}: {company_link}")
                 # If we have a company link, try to get detailed info from company page
                 detailed_info = self._get_company_page_info(company_link)
                 if detailed_info:
                     company_info.update(detailed_info)
-            
+            else:
+                logger.debug(f"No company link found for {company_name}")
+
             # If we couldn't get detailed info, try to extract from job page itself
             if not company_info['company_size'] or not company_info['followers']:
                 job_page_info = self._extract_company_info_from_job_page_content(soup)
                 for key, value in job_page_info.items():
                     if value and not company_info[key]:
                         company_info[key] = value
-            
-            # Create Company object if we have at least some information
-            if any([company_info['company_size'], company_info['followers'], company_info['industry']]):
+
+            # Create Company object if we have at least some information (including just company_url)
+            if any([company_info['company_size'], company_info['followers'], 
+                   company_info['industry'], company_info['company_url']]):
                 return Company(
                     company_name=company_info['company_name'],
                     company_size=company_info['company_size'],
@@ -72,6 +76,7 @@ class LinkedInCompanyParser:
                     company_url=company_info['company_url']
                 )
             
+            logger.debug(f"No company information found for {company_name}")
             return None
             
         except Exception as e:
@@ -81,25 +86,49 @@ class LinkedInCompanyParser:
     def _extract_company_link(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract company profile link from job page"""
         try:
-            # Look for company link in various locations
+            # Updated selectors for LinkedIn's current HTML structure
             selectors = [
+                # Modern LinkedIn job page selectors
+                "a[href*='/company/'][data-tracking-control-name*='public_jobs_topcard']",
+                "a[href*='/company/'][data-tracking-control-name*='company']",
+                ".jobs-unified-top-card__company-name a[href*='/company/']",
+                ".job-details-jobs-unified-top-card__company-name a[href*='/company/']",
+                ".jobs-details__main-content a[href*='/company/']",
+                "[data-test-id*='company'] a[href*='/company/']",
+                
+                # Fallback selectors for different page layouts
                 "a[href*='/company/']",
                 ".topcard__org-name-link",
                 ".top-card-layout__card a[href*='/company/']",
-                "a[data-tracking-control-name='public_jobs_topcard-org-name']"
+                "a[data-tracking-control-name='public_jobs_topcard-org-name']",
+                ".jobs-company__company-name a[href*='/company/']",
+                
+                # Additional modern selectors
+                "[data-entity-urn*='company'] a[href*='/company/']",
+                ".job-details-jobs-unified-top-card a[href*='/company/']",
+                ".jobs-unified-top-card a[href*='/company/']"
             ]
             
             for selector in selectors:
-                element = soup.select_one(selector)
-                if element and element.get('href'):
-                    href = element.get('href')
-                    if '/company/' in href:
-                        # Ensure it's a full URL
-                        if href.startswith('http'):
-                            return href
-                        else:
-                            return urljoin('https://www.linkedin.com', href)
+                elements = soup.select(selector)
+                for element in elements:
+                    if element and element.get('href'):
+                        href = element.get('href')
+                        if '/company/' in href:
+                            # Clean up the URL and ensure it's valid
+                            href = href.split('?')[0]  # Remove query parameters
+                            href = href.split('#')[0]  # Remove fragments
+                            
+                            # Ensure it's a full URL
+                            if href.startswith('http'):
+                                logger.debug(f"Found company link: {href}")
+                                return href
+                            else:
+                                full_url = urljoin('https://www.linkedin.com', href)
+                                logger.debug(f"Found company link (relative): {href} -> {full_url}")
+                                return full_url
             
+            logger.debug("No company link found with any selector")
             return None
             
         except Exception as e:

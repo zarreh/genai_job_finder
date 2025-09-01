@@ -304,7 +304,9 @@ class LinkedInJobParser:
                     job_info["company_size"] = company_info.company_size
                     job_info["company_followers"] = company_info.followers
                     job_info["company_industry"] = company_info.industry
-                    logger.debug(f"Company info extracted for: {job_info['company']}")
+                    job_info["company_info_link"] = company_info.company_url
+                    logger.info(f"Company info extracted for: {job_info['company']}")
+                    logger.info(f"Setting company_info_link to: {company_info.company_url}")
                 else:
                     # Try to get existing company info from database
                     existing_company = self.database.get_company_by_name(job_info["company"])
@@ -313,6 +315,7 @@ class LinkedInJobParser:
                         job_info["company_size"] = existing_company.get('company_size')
                         job_info["company_followers"] = existing_company.get('followers')
                         job_info["company_industry"] = existing_company.get('industry')
+                        job_info["company_info_link"] = existing_company.get('company_url')
                     else:
                         # Create basic company record
                         from .models import Company
@@ -321,12 +324,14 @@ class LinkedInJobParser:
                         job_info["company_size"] = None
                         job_info["company_followers"] = None
                         job_info["company_industry"] = None
+                        job_info["company_info_link"] = None
             except Exception as e:
                 logger.warning(f"Error processing company info for {job_info['company']}: {e}")
                 # Set default values
                 job_info["company_size"] = None
                 job_info["company_followers"] = None
                 job_info["company_industry"] = None
+                job_info["company_info_link"] = None
             
             job_info["company_id"] = company_id
             
@@ -431,7 +436,8 @@ class LinkedInJobParser:
                 company_id=company_id,
                 company_size=job_info["company_size"],
                 company_followers=job_info["company_followers"],
-                company_industry=job_info["company_industry"]
+                company_industry=job_info["company_industry"],
+                company_info_link=job_info["company_info_link"]
             )
             
             return job

@@ -48,6 +48,7 @@ class Job:
     company_size: Optional[str] = None  # Number of employees (e.g., "1,000-5,000 employees")
     company_followers: Optional[str] = None  # Number of followers (e.g., "150,000 followers")
     company_industry: Optional[str] = None  # Company industry
+    company_info_link: Optional[str] = None  # LinkedIn company page URL used for extraction
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
@@ -82,7 +83,8 @@ class Job:
             'company_id': self.company_id,
             'company_size': self.company_size,
             'company_followers': self.company_followers,
-            'company_industry': self.company_industry
+            'company_industry': self.company_industry,
+            'company_info_link': self.company_info_link
         }
 
 

@@ -93,6 +93,7 @@ class DatabaseManager:
                     company_size TEXT,
                     company_followers TEXT,
                     company_industry TEXT,
+                    company_info_link TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (run_id) REFERENCES job_runs (id),
@@ -140,6 +141,10 @@ class DatabaseManager:
             if 'company_industry' not in columns:
                 cursor.execute('ALTER TABLE jobs ADD COLUMN company_industry TEXT')
                 logger.info("Added company_industry column to jobs table")
+            
+            if 'company_info_link' not in columns:
+                cursor.execute('ALTER TABLE jobs ADD COLUMN company_info_link TEXT')
+                logger.info("Added company_info_link column to jobs table")
                 
         except Exception as e:
             logger.warning(f"Migration warning: {e}")
@@ -175,43 +180,50 @@ class DatabaseManager:
                 WHERE id = ?
             ''', (status, job_count, error_message, datetime.now(), run_id))
     
-    def save_job(self, job: Job) -> str:
-        """Save a job to the database - matches legacy format"""
-        job_dict = job.to_dict()
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+    def save_job(self, job: Job) -> int:
+        """Save job to database"""
+        try:
+            # Convert job to dict for database insertion
+            job_data = job.to_dict()
             
-            # Check if job already exists
-            cursor.execute('''
-                SELECT id FROM jobs WHERE id = ?
-            ''', (job.id,))
+            # Debug logging to trace company_info_link values
+            logger.info(f"Saving job {job_data.get('title', 'N/A')} for company {job_data.get('company', 'N/A')}")
+            logger.info(f"company_info_link value: {job_data.get('company_info_link', 'NOT_SET')}")
             
-            existing = cursor.fetchone()
-            if existing:
-                logger.debug(f"Job {job.id} already exists")
-                return existing['id']
-            
-            # Insert new job with legacy column structure + location fields + company_id + company info
-            cursor.execute('''
+            # Define the INSERT query
+            query = """
                 INSERT INTO jobs (
-                    id, company, title, location, work_location_type, level, salary_range, content,
-                    employment_type, job_function, industries, posted_time,
-                    applicants, job_id, date, parsing_link, job_posting_link, run_id, company_id,
-                    company_size, company_followers, company_industry
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                job_dict['id'], job_dict['company'], job_dict['title'],
-                job_dict['location'], job_dict['work_location_type'], job_dict['level'], 
-                job_dict['salary_range'], job_dict['content'], job_dict['employment_type'], 
-                job_dict['job_function'], job_dict['industries'], job_dict['posted_time'], 
-                job_dict['applicants'], job_dict['job_id'], job_dict['date'], 
-                job_dict['parsing_link'], job_dict['job_posting_link'], job_dict['run_id'],
-                job_dict['company_id'], job_dict['company_size'], job_dict['company_followers'],
-                job_dict['company_industry']
-            ))
+                    id, company, title, location, work_location_type,
+                    level, salary_range, content, employment_type, job_function,
+                    industries, posted_time, applicants, job_id, date,
+                    parsing_link, job_posting_link, run_id, company_id,
+                    company_size, company_followers, company_industry, company_info_link
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
             
-            return job.id
+            values = (
+                job_data['id'], job_data['company'], job_data['title'],
+                job_data['location'], job_data['work_location_type'],
+                job_data['level'], job_data['salary_range'], job_data['content'],
+                job_data['employment_type'], job_data['job_function'],
+                job_data['industries'], job_data['posted_time'], job_data['applicants'],
+                job_data['job_id'], job_data['date'], job_data['parsing_link'],
+                job_data['job_posting_link'], job_data['run_id'], job_data['company_id'],
+                job_data['company_size'], job_data['company_followers'],
+                job_data['company_industry'], job_data['company_info_link']
+            )
+            
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, values)
+                return cursor.lastrowid
+            
+        except sqlite3.Error as e:
+            logger.error(f"Database error saving job: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error saving job: {e}")
+            raise
     
     def save_company(self, company: Company) -> str:
         """Save a company to the database"""
@@ -312,7 +324,7 @@ class DatabaseManager:
                     SELECT id, company, title, location, work_location_type, level, salary_range, content,
                            employment_type, job_function, industries, posted_time,
                            applicants, job_id, date, parsing_link, job_posting_link,
-                           company_size, company_followers, company_industry
+                           company_size, company_followers, company_industry, company_info_link
                     FROM jobs WHERE run_id = ?
                     ORDER BY created_at DESC
                 '''
@@ -322,7 +334,7 @@ class DatabaseManager:
                     SELECT id, company, title, location, work_location_type, level, salary_range, content,
                            employment_type, job_function, industries, posted_time,
                            applicants, job_id, date, parsing_link, job_posting_link,
-                           company_size, company_followers, company_industry
+                           company_size, company_followers, company_industry, company_info_link
                     FROM jobs
                     ORDER BY created_at DESC
                 '''
@@ -342,7 +354,7 @@ class DatabaseManager:
                     SELECT id, company, title, location, work_location_type, level, salary_range, content,
                            employment_type, job_function, industries, posted_time,
                            applicants, job_id, date, parsing_link, job_posting_link,
-                           company_size, company_followers, company_industry
+                           company_size, company_followers, company_industry, company_info_link
                     FROM jobs WHERE run_id = ?
                     ORDER BY created_at DESC
                 '''
@@ -352,7 +364,7 @@ class DatabaseManager:
                     SELECT id, company, title, location, work_location_type, level, salary_range, content,
                            employment_type, job_function, industries, posted_time,
                            applicants, job_id, date, parsing_link, job_posting_link,
-                           company_size, company_followers, company_industry
+                           company_size, company_followers, company_industry, company_info_link
                     FROM jobs
                     ORDER BY created_at DESC
                 '''
