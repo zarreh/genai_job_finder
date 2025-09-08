@@ -39,3 +39,5 @@ build/
 *.cfg
 # Ignore environment files
 *.env
+# Ignore token files
+*token*

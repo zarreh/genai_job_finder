@@ -11,6 +11,7 @@ help:
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
 	@echo "  run-frontend         - Run the frontend application with AI features"
 	@echo "  run-company-enrichment - Run company enrichment pipeline separately"
+	@echo "  config               - Show current parser configuration"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
 	@echo ""
@@ -152,6 +153,12 @@ run-company-enrichment:
 		echo "📊 Showing current statistics:"; \
 		poetry run python run_company_enrichment.py --stats; \
 	fi
+
+# Show current parser configuration
+config:
+	@echo "🔧 PARSER CONFIGURATION"
+	@echo "======================="
+	poetry run python -m genai_job_finder.linkedin_parser.config_manager --all
 
 # Clean up temporary files
 clean:
