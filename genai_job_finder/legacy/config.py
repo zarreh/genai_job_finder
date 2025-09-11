@@ -11,10 +11,17 @@ HEADERS: dict[str, str] = {
 ## time formats, r86400: # last 24 hours, r604800: last 7 days, r2592000: last 30 days
 
 LINKEDIN_JOB_SEARCH_PARAMS: list[dict[str, str | bool]] = [
+    # {
+    #     "keywords": "senior data scientist",
+    #     "location": "San Antonio",
+    #     "f_TPR": "r86400",  # last 24 hours
+    #     "remote": False,
+    #     "parttime": False,  # full-time
+    # },
     {
-        "keywords": "senior data scientist",
+        "keywords": "Analyst",
         "location": "San Antonio",
-        "f_TPR": "r86400",  # last 24 hours
+        "f_TPR": "r604800",  # last 7 days
         "remote": False,
         "parttime": False,  # full-time
     },

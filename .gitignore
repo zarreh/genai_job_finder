@@ -39,3 +39,7 @@ build/
 *.cfg
 # Ignore environment files
 *.env
+# Ignore token files
+*token*
+# ignore models from transformers
+*/models/

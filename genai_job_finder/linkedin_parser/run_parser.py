@@ -20,6 +20,7 @@ import argparse
 import logging
 from .parser import LinkedInJobParser
 from .database import DatabaseManager
+from .config import ParserConfig
 
 # Configure logging
 logging.basicConfig(
@@ -31,15 +32,26 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Run the comprehensive LinkedIn job parser with integrated company intelligence."""
+    # Load configuration
+    config = ParserConfig.from_env()
+    
+    # Get base search parameters from config (first entry in LINKEDIN_JOB_SEARCH_PARAMS)
+    try:
+        base_search_params = config.get_search_params()
+    except ValueError as e:
+        print(f"❌ Configuration Error: {e}")
+        print("💡 Please add at least one SearchParams entry to LINKEDIN_JOB_SEARCH_PARAMS in config.py")
+        return 1
+    
     parser = argparse.ArgumentParser(description="LinkedIn Job Parser with Company Intelligence")
-    parser.add_argument("--search-query", default="data scientist", help="Job search query")
-    parser.add_argument("--location", default="San Antonio", help="Location filter")
-    parser.add_argument("--total-jobs", type=int, default=50, help="Total jobs to parse")
-    parser.add_argument("--time-filter", default="r86400", help="Time filter (r86400=24h, r604800=7d)")
-    parser.add_argument("--remote", action="store_true", help="Include remote jobs")
-    parser.add_argument("--parttime", action="store_true", help="Include part-time jobs")
-    parser.add_argument("--db-path", default="data/jobs.db", help="Database path")
-    parser.add_argument("--export-csv", default="data/jobs_export.csv", help="CSV export path")
+    parser.add_argument("--search-query", default=base_search_params.keywords, help="Job search query")
+    parser.add_argument("--location", default=base_search_params.location, help="Location filter")
+    parser.add_argument("--total-jobs", type=int, default=base_search_params.total_jobs, help="Total jobs to parse")
+    parser.add_argument("--time-filter", default=base_search_params.time_filter, help="Time filter (r86400=24h, r604800=7d)")
+    parser.add_argument("--remote", action="store_true", default=base_search_params.remote, help="Include remote jobs")
+    parser.add_argument("--parttime", action="store_true", default=base_search_params.parttime, help="Include part-time jobs")
+    parser.add_argument("--db-path", default=config.database_path, help="Database path")
+    parser.add_argument("--export-csv", default=config.export_csv_path, help="CSV export path")
     
     args = parser.parse_args()
     
