@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-Enhanced Job Parser - Company Information Demo
-
-This script demonstrates the enhanced LinkedIn job parser with automatic 
-company information extraction.
-"""
 
 from genai_job_finder.linkedin_parser.database import DatabaseManager
 import pandas as pd
