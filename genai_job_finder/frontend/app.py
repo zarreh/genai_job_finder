@@ -26,6 +26,7 @@ from genai_job_finder.frontend.tabs.live_search import render_live_search_tab
 from genai_job_finder.frontend.tabs.stored_jobs import render_stored_jobs_tab
 from genai_job_finder.frontend.tabs.ai_enhanced import render_ai_enhanced_tab
 from genai_job_finder.frontend.tabs.search_history import render_search_history_tab
+from genai_job_finder.frontend.tabs.career_chat import render_career_chat_tab
 
 # Setup logging
 setup_logging()
@@ -73,11 +74,12 @@ def main():
         return
     
     # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🔍 Live Job Search", 
         "📊 Stored Jobs", 
         "🤖 AI-Enhanced Jobs", 
-        "📈 Search History"
+        "📈 Search History",
+        "💼 Career Chat"
     ])
     
     # Render each tab
@@ -92,6 +94,9 @@ def main():
     
     with tab4:
         render_search_history_tab()
+    
+    with tab5:
+        render_career_chat_tab()
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,16 @@
 # GenAI Job Finder
 
-A comprehensive job finder application that scrapes LinkedIn job postings with AI-ready features for job analysis and matching. The system features a **separate company enrichment pipeline** with intelligent company data management and advanced frontend display capabilities.
+A comprehensive job finder application that scrapes LinkedIn job postings with AI-ready features for job analysis and matching. The system features a **separate company enrichment pipeline** with intelligent com- **💼 Career Chat Tab**: AI-powered career advisor and job search assistant
+  - **🤖 Interactive chat interface** powered by LangChain with configurable LLM providers
+  - **⚙️ Flexible LLM configuration**: Mix and match different providers for different purposes
+    - **Chat LLM**: Use Ollama llama3.2 for natural conversation (fast, local)
+    - **Resume Analysis LLM**: Use OpenAI GPT-3.5 for precise resume analysis (high quality)
+    - **Configuration modes**: `default` (all Ollama), `mixed` (Ollama chat + OpenAI resume), `openai` (all OpenAI), `env` (custom from environment)
+  - **📄 Resume upload and analysis** using query_definition module for personalized career insights
+  - **🎯 Career-focused conversations** with automatic topic filtering (rejects non-career questions)
+  - **🚀 Future-focused job recommendations** based on resume analysis
+  - **💡 Professional guidance** on job search strategies, interview prep, and career development
+  - **💾 Chat history download** and conversation managementta management and advanced frontend display capabilities.
 
 ## 🚀 Key Features
 
@@ -41,7 +51,19 @@ make install
 # or: poetry install
 ```
 
-3. **Verify installation:**
+3. **Configure LLM providers (optional):**
+```bash
+# Copy and customize environment file
+cp .env.example .env
+
+# Set your configuration mode:
+# CHAT_CONFIG_MODE=default    # All Ollama (default)
+# CHAT_CONFIG_MODE=mixed      # Ollama chat + OpenAI resume 
+# CHAT_CONFIG_MODE=openai     # All OpenAI
+# CHAT_CONFIG_MODE=env        # Custom from environment variables
+```
+
+4. **Verify installation:**
 ```bash
 make help
 ```
@@ -229,7 +251,14 @@ make run-frontend
   - Salary extraction and normalization
   - Location and employment type validation
   - Comprehensive filtering and analytics
-- **📈 Search History Tab**: Parser run analytics
+- **� Career Chat Tab**: AI-powered career advisor and job search assistant
+  - **🤖 Interactive chat interface** powered by LangChain and Ollama llama3.2
+  - **📄 Resume upload and analysis** using query_definition module for personalized career insights
+  - **🎯 Career-focused conversations** with automatic topic filtering (rejects non-career questions)
+  - **🚀 Future-focused job recommendations** based on resume analysis
+  - **💡 Professional guidance** on job search strategies, interview prep, and career development
+  - **💾 Chat history download** and conversation management
+- **�📈 Search History Tab**: Parser run analytics
   - View recent parser execution history
   - Job count and timing statistics
   - Run status and error tracking
