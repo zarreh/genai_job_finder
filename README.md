@@ -4,6 +4,7 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 
 ## 🚀 Key Features
 
+- **🔍 Resume-Based Job Query Generator**: AI-powered analysis of resumes to generate targeted LinkedIn job search queries with 5 primary + 8 secondary job titles
 - **� Separate Company Enrichment Pipeline**: Dedicated company information service with lookup-first approach to eliminate redundant parsing  
 - **� Optimized LinkedIn Parser**: Smart company handling with 3-5x performance improvement for existing companies
 - **🛡️ Built-in Rate Limiting**: No more LinkedIn blocks - intelligent delays prevent rate limiting
@@ -111,6 +112,52 @@ poetry run python run_parser.py --search-query "data scientist" --total-jobs 50
 - 📤 Export to CSV (`data/jobs_export.csv`) with all 21 columns
 - 📊 Display progress with visual indicators
 - 🎯 Apply location and company intelligence automatically
+
+### Resume-Based Job Query Generation
+
+Generate targeted LinkedIn job search queries from resume analysis:
+
+```bash
+# Analyze resume and generate job queries
+make run-query-definition RESUME=data/Ali_Zarreh_CV_2025_08_30.pdf
+
+# Use Ollama instead of OpenAI
+make run-query-definition RESUME=resume.pdf PROVIDER=ollama
+
+# Save results to JSON file
+make run-query-definition RESUME=resume.pdf OUTPUT=queries.json
+
+# Advanced options with specific model
+make run-query-definition RESUME=resume.pdf PROVIDER=openai MODEL=gpt-4 VERBOSE=true
+```
+
+**Features:**
+- 📄 **Multi-format Support**: PDF, DOC, and DOCX resume processing
+- 🎯 **Smart Analysis**: AI-powered skill and experience extraction
+- 🔬 **Dual Title Generation**: 5 primary (realistic) + 8 secondary (opportunistic) job titles
+- 🚀 **Future-Focused**: Generates forward-looking career opportunities
+- 💾 **Export Support**: JSON format for integration with other tools
+- 🤖 **Flexible LLM**: Support for OpenAI GPT-3.5/4 or Ollama local models
+
+**Example Output:**
+```
+🎯 PRIMARY JOB TITLES (Current Skills & Experience):
+• Senior Data Scientist
+• Machine Learning Engineer  
+• AI Research Scientist
+• Data Engineering Manager
+• Principal Data Analyst
+
+🚀 SECONDARY JOB TITLES (Future Opportunities):
+• Director of Data Science
+• VP of AI/ML
+• Chief Data Officer
+• AI Product Manager
+• ML Infrastructure Architect
+• Data Science Consultant
+• AI Strategy Lead
+• Head of Analytics
+```
 
 ## 🏢 Company Intelligence & Optimization
 

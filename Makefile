@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-pipeline run-cleaner run-frontend run-company-enrichment test clean
+.PHONY: help install run-parser run-pipeline run-cleaner run-frontend run-company-enrichment run-query-definition test clean
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  run-cleaner          - Run data cleaner only on existing data"
 	@echo "  run-frontend         - Run the frontend application with AI features"
 	@echo "  run-company-enrichment - Run company enrichment pipeline separately"
+	@echo "  run-query-definition - Generate LinkedIn job search queries from resume analysis"
 	@echo "  config               - Show current parser configuration"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
@@ -20,6 +21,8 @@ help:
 	@echo "  make run-parser REMOTE=true PARTTIME=true"
 	@echo "  make run-company-enrichment STATS=true  # Show enrichment statistics"
 	@echo "  make run-company-enrichment ENRICH=true # Enrich all companies"
+	@echo "  make run-query-definition RESUME=path/to/resume.pdf"
+	@echo "  make run-query-definition RESUME=path/to/resume.pdf PROVIDER=ollama"
 
 # Install dependencies
 install:
@@ -159,6 +162,51 @@ config:
 	@echo "🔧 PARSER CONFIGURATION"
 	@echo "======================="
 	poetry run python -m genai_job_finder.linkedin_parser.config_manager --all
+
+# Generate LinkedIn job search queries from resume analysis
+run-query-definition:
+	@echo "🔍 RESUME-BASED JOB QUERY GENERATOR"
+	@echo "==================================="
+	@echo "🎯 Features:"
+	@echo "   📄 Resume analysis (PDF/DOC/DOCX support)"
+	@echo "   🤖 AI-powered job title extraction"
+	@echo "   🔬 5 primary + 8 secondary job titles"
+	@echo "   🚀 Future-focused career opportunities"
+	@echo "   💾 JSON export support"
+	@echo ""
+	@if [ "$(RESUME)" != "" ]; then \
+		echo "📄 Resume file: $(RESUME)"; \
+		ARGS="$(RESUME)"; \
+	else \
+		echo "❌ Error: RESUME parameter required"; \
+		echo "💡 Usage: make run-query-definition RESUME=path/to/resume.pdf"; \
+		echo "💡 Examples:"; \
+		echo "   make run-query-definition RESUME=data/Ali_Zarreh_CV_2025_08_30.pdf"; \
+		echo "   make run-query-definition RESUME=resume.pdf PROVIDER=ollama"; \
+		echo "   make run-query-definition RESUME=resume.pdf OUTPUT=queries.json"; \
+		exit 1; \
+	fi; \
+	if [ "$(PROVIDER)" != "" ]; then \
+		echo "🤖 LLM Provider: $(PROVIDER)"; \
+		ARGS="$$ARGS --provider $(PROVIDER)"; \
+	else \
+		echo "🤖 LLM Provider: OpenAI (default)"; \
+	fi; \
+	if [ "$(MODEL)" != "" ]; then \
+		echo "🧠 Model: $(MODEL)"; \
+		ARGS="$$ARGS --model $(MODEL)"; \
+	fi; \
+	if [ "$(OUTPUT)" != "" ]; then \
+		echo "💾 Output file: $(OUTPUT)"; \
+		ARGS="$$ARGS --output $(OUTPUT)"; \
+	fi; \
+	if [ "$(VERBOSE)" = "true" ]; then \
+		echo "🔍 Verbose mode enabled"; \
+		ARGS="$$ARGS --verbose"; \
+	fi; \
+	echo ""; \
+	echo "🚀 Starting analysis..."; \
+	poetry run python -m genai_job_finder.query_definition.run_query_definition $$ARGS
 
 # Clean up temporary files
 clean:

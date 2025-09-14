@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Quick demo of the data cleaner with real data (keyword-based processing only).
-This demo does not require Ollama to be running.
-"""
 
 import pandas as pd
 import asyncio
