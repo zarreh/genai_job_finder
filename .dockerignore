@@ -16,121 +16,90 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-*.pyc
-*.pyo
-*.pyd
-.Python
 
 # Virtual environments
-.env
-.env2
-.venv
-env/
 venv/
+env/
 ENV/
-env.bak/
-venv.bak/
-.virtualenvs/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Logs
-*.log
-logs/
-frontend.log
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
 
 # Git
 .git/
 .gitignore
 
-# Docker
-.dockerignore
-Dockerfile*
-docker-compose*.yml
-
-# Documentation (keep README.md for Poetry)
-# README.md
+# Documentation (except README.md)
 docs/
-DOCKER_DEPLOYMENT.md
-REFACTORING.md
+*.md
+!README.md
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Jupyter notebooks
+*.ipynb
+notebooks/
+.ipynb_checkpoints/
 
 # Test files
 tests/
 test_*.py
 *_test.py
 
-# Coverage
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
+# Configuration files (will be provided via environment)
+.env
+.env.*
+!.env.example
 
-# Backup files
-*.backup
-*.bak
-*~
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
 
-# Large data files (keep structure but exclude large files)
-*.db-journal
-*.sqlite3-journal
+# Deployment scripts
+deploy.sh
+docker-push.sh
+test-deployment.sh
 
-# Poetry (keep poetry.lock for reproducible builds)
-# poetry.lock
-
-# Node modules (if any)
-node_modules/
-
-# Environment files
-.env.local
-.env.development
-.env.test
-.env.production
+# Large data files
+data/
+*.csv
+*.json
+*.parquet
 
 # Temporary files
 tmp/
 temp/
-*.tmp
-*.temp
+.tmp/
 
-# Archive files
-*.zip
-*.tar.gz
-*.rar
+# Cache directories
+.cache/
+.pytest_cache/
+.mypy_cache/
 
-# Media files
-*.mp4
-*.avi
-*.mov
-*.wmv
-*.flv
-*.webm
+# Node modules (if any)
+node_modules/
 
-# Large documents (keep small examples)
-*.pdf
-*.docx
-*.doc
+# Large model files
+*.bin
+*.onnx
+*.pkl
+*.joblib
+models/

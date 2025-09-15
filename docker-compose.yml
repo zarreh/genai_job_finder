@@ -1,6 +1,11 @@
 services:
   genai-job-finder:
-    build: .
+    image: zarreh/genai-job-finder:latest
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - zarreh/genai-job-finder:latest
     ports:
       - "8501:8501"
     environment:

@@ -193,11 +193,25 @@ What career topic would you like to discuss? 💼"""
                 "chat_history": chat_history
             })
             
+            # Extract content from response (handle both string and AIMessage)
+            if hasattr(response, 'content'):
+                # LangChain AIMessage object
+                response_content = response.content
+            elif isinstance(response, str):
+                # Plain string response
+                response_content = response
+            elif hasattr(response, 'text'):
+                # Some LLM responses have .text attribute
+                response_content = response.text
+            else:
+                # Fallback to string conversion
+                response_content = str(response)
+            
             # Add to memory
             self.memory.chat_memory.add_user_message(user_input)
-            self.memory.chat_memory.add_ai_message(response)
+            self.memory.chat_memory.add_ai_message(response_content)
             
-            return response
+            return response_content
             
         except Exception as e:
             logger.error(f"Error generating response: {e}")

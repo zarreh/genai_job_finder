@@ -90,6 +90,40 @@ start_services() {
     log "Application will be available at: http://localhost:8501"
 }
 
+# Build and push to Docker Hub
+build_and_push() {
+    log "Building and pushing to Docker Hub..."
+    
+    VERSION=${1:-latest}
+    
+    # Use the docker-push.sh script
+    if [ -f "./docker-push.sh" ]; then
+        ./docker-push.sh "$VERSION"
+    else
+        error "docker-push.sh script not found"
+    fi
+}
+
+# Pull and start services (no build)
+start_services_pull() {
+    log "Pulling and starting services..."
+    
+    # Pull latest images
+    docker-compose pull
+    
+    # Start services based on profile
+    if [ "$1" = "full" ] || [ "$1" = "ollama" ]; then
+        log "Starting with Ollama service..."
+        docker-compose --profile ollama up -d
+    else
+        log "Starting without Ollama (OpenAI mode)..."
+        docker-compose up -d genai-job-finder
+    fi
+    
+    log "Services started ✓"
+    log "Application will be available at: http://localhost:8501"
+}
+
 # Stop services
 stop_services() {
     log "Stopping services..."
@@ -172,6 +206,11 @@ case "${1:-start}" in
         setup_environment
         start_services "${2:-default}"
         ;;
+    start-pull)
+        check_prerequisites
+        setup_environment
+        start_services_pull "${2:-default}"
+        ;;
     start-ollama)
         check_prerequisites
         setup_environment
@@ -181,6 +220,10 @@ case "${1:-start}" in
         check_prerequisites
         setup_environment
         start_services "full"
+        ;;
+    push)
+        check_prerequisites
+        build_and_push "$2"
         ;;
     stop)
         stop_services
@@ -209,12 +252,14 @@ case "${1:-start}" in
         cleanup
         ;;
     *)
-        echo "Usage: $0 {start|start-ollama|start-full|stop|restart|restart-ollama|logs|status|update|backup|cleanup}"
+        echo "Usage: $0 {start|start-pull|start-ollama|start-full|push|stop|restart|restart-ollama|logs|status|update|backup|cleanup}"
         echo ""
         echo "Commands:"
-        echo "  start         - Start application (OpenAI mode)"
+        echo "  start         - Build and start application (OpenAI mode)"
+        echo "  start-pull    - Pull from Docker Hub and start (no build)"
         echo "  start-ollama  - Start application with Ollama"
         echo "  start-full    - Start application with Ollama and setup"
+        echo "  push [version]- Build and push to Docker Hub (zarreh/genai-job-finder)"
         echo "  stop          - Stop all services"
         echo "  restart       - Restart application (OpenAI mode)"
         echo "  restart-ollama- Restart application with Ollama"
