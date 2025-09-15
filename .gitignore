@@ -3,6 +3,7 @@ pdfs/
 *.csv
 *.xlsx
 .env
+.env2
 /notebooks/interview/
 my_resume/
 # Ignore Jupyter Notebook checkpoints

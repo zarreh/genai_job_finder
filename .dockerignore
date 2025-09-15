@@ -1,0 +1,135 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.env
+.env2
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.virtualenvs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+frontend.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Large data files (keep structure but exclude large files)
+*.db-journal
+*.sqlite3-journal
+
+# Poetry (keep poetry.lock for reproducible builds)
+# poetry.lock
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# Media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Large documents (keep small examples)
+*.pdf
+*.docx
+*.doc
