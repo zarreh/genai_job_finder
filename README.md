@@ -15,10 +15,10 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 ## 🚀 Key Features
 
 - **🔍 Resume-Based Job Query Generator**: AI-powered analysis of resumes to generate targeted LinkedIn job search queries with 5 primary + 8 secondary job titles
-- **� Separate Company Enrichment Pipeline**: Dedicated company information service with lookup-first approach to eliminate redundant parsing  
-- **� Optimized LinkedIn Parser**: Smart company handling with 3-5x performance improvement for existing companies
+- **🏢 Separate Company Enrichment Pipeline**: Dedicated company information service with lookup-first approach to eliminate redundant parsing  
+- **⚡ Optimized LinkedIn Parser**: Smart company handling with 3-5x performance improvement for existing companies
 - **🛡️ Built-in Rate Limiting**: No more LinkedIn blocks - intelligent delays prevent rate limiting
-- **📊 Enhanced Frontend Display**: Separate "Company Info" column with rich metadata formatting (🏭 Industry • � Size • �‍� Followers)
+- **📊 Enhanced Frontend Display**: Separate "Company Info" column with rich metadata formatting (🏭 Industry • 👥 Size • 👨‍💼 Followers)
 - **🌍 Location Intelligence**: Automatic location extraction and work type classification (Remote/Hybrid/On-site)
 - **🤖 AI-Powered Data Cleaning**: Advanced job data enhancement with experience analysis, salary extraction, and field validation
 - **💰 Smart Salary Processing**: AI-powered salary range extraction and normalization
@@ -27,6 +27,7 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 - **💾 Database Storage**: SQLite database with separate companies table and foreign key relationships
 - **📤 Automatic CSV Export**: Enhanced data export with comprehensive company information
 - **📈 Progress Tracking**: Visual progress bars and detailed statistics
+- **🐳 Production-Ready Deployment**: Optimized Docker containers with Docker Hub integration, automated workflows, and comprehensive monitoring
 
 ## 📋 Requirements
 
@@ -38,6 +39,287 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
   - Pull model: `ollama pull llama3.2`
 
 ## 🛠️ Installation
+
+### Option 1: Docker Deployment (Recommended for Production)
+
+#### Quick Start with Docker
+
+**1. Clone and setup:**
+```bash
+git clone https://github.com/zarreh/genai_job_finder.git
+cd genai_job_finder
+
+# Test deployment readiness
+./test-deployment.sh
+```
+
+**2. Choose deployment method:**
+```bash
+# Deploy with OpenAI (recommended for production)
+./deploy.sh start
+
+# Deploy with local Ollama (privacy-focused)
+./deploy.sh start-ollama
+
+# Deploy from Docker Hub (fastest)
+./deploy.sh start-pull
+```
+
+**3. Access the application:** `http://localhost:8501`
+
+#### Docker Hub Integration
+
+Your application is available on Docker Hub at: **`zarreh/genai-job-finder`**
+
+**Build and push to Docker Hub:**
+```bash
+# Using Makefile (recommended)
+make docker-push                    # Push latest
+make docker-push VERSION=v1.0.0    # Push with version tag
+
+# Using deployment script
+./deploy.sh push                    # Push latest 
+./deploy.sh push v1.0.0            # Push with version
+
+# Manual Docker commands
+docker build -t zarreh/genai-job-finder:latest .
+docker push zarreh/genai-job-finder:latest
+```
+
+**Deploy from Docker Hub:**
+```bash
+# Using Makefile
+make docker-deploy                  # Deploy from Docker Hub
+make docker-deploy-local           # Deploy using local build
+
+# Using deployment script  
+./deploy.sh start-pull             # Pull from Docker Hub and deploy
+```
+
+#### Deployment Configurations
+
+**OpenAI Mode (Recommended):**
+- Uses OpenAI GPT-3.5 Turbo for chat and resume analysis
+- Lower resource usage (~1-2GB RAM)
+- Requires OpenAI API key
+- Better performance and reliability
+
+```bash
+# Set up environment
+cp .env.production .env
+# Edit .env:
+# CHAT_CONFIG_MODE=openai
+# OPENAI_API_KEY=your_api_key_here
+
+./deploy.sh start
+```
+
+**✅ Detailed OpenAI Configuration:**
+- **Chat Model**: OpenAI GPT-3.5 Turbo (temperature: 0.7 for creative conversations)
+- **Resume Analysis Model**: OpenAI GPT-3.5 Turbo (temperature: 0.3 for focused analysis)
+
+**Environment Variables:**
+```bash
+CHAT_CONFIG_MODE=openai
+CHAT_LLM_PROVIDER=openai
+CHAT_LLM_MODEL=gpt-3.5-turbo
+RESUME_LLM_PROVIDER=openai
+RESUME_LLM_MODEL=gpt-3.5-turbo
+```
+
+**Benefits:**
+- ✅ Consistent performance across both features
+- ✅ No local Ollama dependency required  
+- ✅ Better accuracy for resume analysis
+- ✅ Faster response times
+- ✅ Lower resource usage on server
+
+**Ollama Mode (Privacy-focused):**
+- Uses local Llama 3.2 model
+- Complete privacy (no external APIs)
+- Higher resource usage (8GB+ RAM recommended)
+- Self-hosted AI capabilities
+
+```bash
+./deploy.sh start-ollama
+```
+
+**Mixed Mode (Balanced):**
+- Ollama for chat, OpenAI for resume analysis
+- Balanced performance and privacy
+
+```bash
+# Edit .env:
+# CHAT_CONFIG_MODE=mixed
+# OPENAI_API_KEY=your_api_key_here
+
+./deploy.sh start-ollama
+```
+
+#### Docker Features
+
+- 🐳 **Complete containerization** with Python 3.12-slim optimized image
+- 🔧 **Flexible LLM configuration** (OpenAI, Ollama, or mixed)
+- 📦 **Optimized dependencies** with Poetry (~1-2GB vs 12GB+ unoptimized)
+- 🔄 **Health checks** and automatic restarts
+- 💾 **Persistent data storage** with volume mounts
+- 🛡️ **Security hardening** with non-root user
+- 📊 **Easy monitoring** with comprehensive logging
+- 🚀 **Docker Hub integration** for easy deployment
+- ⚡ **Make commands** for streamlined workflow
+
+#### System Requirements
+
+**Minimum (OpenAI mode):**
+- 2 CPU cores
+- 4GB RAM  
+- 10GB disk space
+
+**Recommended (Ollama mode):**
+- 4 CPU cores
+- 8GB RAM
+- 20GB disk space
+
+#### Deployment Commands via Makefile
+
+The Makefile includes comprehensive Docker deployment automation:
+
+```bash
+# Build and deployment
+make docker-build                   # Build Docker image locally
+make docker-push [VERSION=tag]      # Build and push to Docker Hub  
+make docker-deploy                  # Deploy from Docker Hub
+make docker-deploy-local           # Deploy using local image
+make docker-deploy-ollama          # Deploy with Ollama service
+
+# Management and monitoring  
+make docker-stop                   # Stop all services
+make docker-status                 # Check deployment status
+make docker-logs                   # View service logs
+make docker-restart                # Restart services
+
+# Usage examples
+make docker-push VERSION=v1.0.0    # Push specific version
+make docker-status                 # Check current status
+make docker-logs                   # View application logs
+```
+
+#### Server Deployment Guide
+
+**1. Prerequisites:**
+- Docker 20.10+
+- Docker Compose 2.0+
+- Git
+- Appropriate system resources (see requirements above)
+
+**2. Firewall configuration:**
+```bash
+# Allow application traffic
+sudo ufw allow 8501/tcp
+
+# If using Ollama externally
+sudo ufw allow 11434/tcp
+```
+
+**3. Production setup with reverse proxy:**
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://localhost:8501;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### Monitoring and Maintenance
+
+**Health checks:**
+```bash
+# Check application health
+curl http://localhost:8501/_stcore/health
+
+# Using deployment scripts
+./deploy.sh status
+make docker-status
+```
+
+**Log monitoring:**
+```bash
+# View all logs
+./deploy.sh logs
+make docker-logs
+
+# View specific service logs
+./deploy.sh logs genai-job-finder
+docker-compose logs -f genai-job-finder
+```
+
+**Backup and recovery:**
+```bash
+# Create backup
+./deploy.sh backup
+
+# Manual backup
+tar -czf backup_$(date +%Y%m%d).tar.gz data/ genai_job_finder/data/
+```
+
+**Updates:**
+```bash
+# Automatic update
+./deploy.sh update
+
+# Manual update
+git pull origin main
+make docker-build
+make docker-push
+./deploy.sh restart
+```
+
+#### Troubleshooting
+
+**Common Docker issues:**
+
+1. **"Command not found: streamlit" error:**
+   - This was fixed by updating Poetry configuration in Dockerfile
+   - Poetry now installs dependencies to system Python instead of virtual environment
+   - Use latest image: `zarreh/genai-job-finder:latest`
+
+2. **Large Docker image size (12GB+):**
+   - Fixed with optimized Dockerfile
+   - Current size: ~1-2GB (vs 12GB+ unoptimized)
+   - Removed Poetry virtual environment overhead
+   - Cleaned up caches and temporary files
+
+3. **Application not starting:**
+   ```bash
+   make docker-logs
+   # or
+   ./deploy.sh logs genai-job-finder
+   ```
+
+4. **Port conflicts:**
+   ```bash
+   # Check what's using port 8501
+   sudo netstat -tlnp | grep 8501
+   ```
+
+5. **Permission issues:**
+   ```bash
+   sudo chown -R 1000:1000 data/ genai_job_finder/data/
+   ```
+
+**Performance tuning:**
+- For Ollama mode: Use SSD storage, monitor GPU usage
+- For OpenAI mode: Configure API rate limits and timeouts
+- Monitor resource usage with `docker stats`
+
+### Option 2: Local Development Setup
 
 1. **Clone the repository:**
 ```bash
@@ -958,6 +1240,27 @@ jupyter notebook notebooks/job_analysis.ipynb
 - **Comprehensive documentation** with examples
 - **Streamlit web interface** for interactive use
 - **AI integration** for data enhancement
+
+---
+
+## 🆕 Recent Updates
+
+### Docker Deployment Enhancement (September 2024)
+- **🐳 Optimized Docker Image**: Reduced size from 12GB+ to ~1-2GB through Poetry configuration fixes
+- **🚀 Docker Hub Integration**: Complete publishing workflow to `zarreh/genai-job-finder` repository
+- **⚡ Makefile Automation**: Added comprehensive Docker commands (`make docker-push`, `make docker-deploy`, etc.)
+- **🔧 Streamlit Fix**: Resolved "Command not found: streamlit" error through proper Poetry virtual environment handling
+- **📦 Multiple Deployment Options**: Local build, Docker Hub pull, and Ollama support
+- **🛡️ Production Ready**: Health checks, monitoring, and automated deployment scripts
+- **📊 Comprehensive Monitoring**: Integrated logging, status checks, and maintenance commands
+
+### Key Docker Commands Added:
+```bash
+make docker-push VERSION=v1.0.0    # Build and push to Docker Hub
+make docker-deploy                  # Deploy from Docker Hub
+make docker-status                  # Check deployment status
+make docker-logs                    # View application logs
+```
 
 ---
 

@@ -1,6 +1,6 @@
 # GenAI Job Finder Makefile
 
-.PHONY: help install run-parser run-pipeline run-cleaner run-frontend run-company-enrichment run-query-definition test clean
+.PHONY: help install run-parser run-pipeline run-cleaner run-frontend run-company-enrichment run-query-definition docker-build docker-push docker-deploy docker-deploy-local docker-deploy-ollama docker-stop docker-status docker-logs docker-restart test clean
 
 # Default target
 help:
@@ -12,6 +12,19 @@ help:
 	@echo "  run-frontend         - Run the frontend application with AI features"
 	@echo "  run-company-enrichment - Run company enrichment pipeline separately"
 	@echo "  run-query-definition - Generate LinkedIn job search queries from resume analysis"
+	@echo ""
+	@echo "Docker Deployment:"
+	@echo "  docker-build         - Build Docker image locally"
+	@echo "  docker-push          - Build and push to Docker Hub (zarreh/genai-job-finder)"
+	@echo "  docker-deploy        - Deploy from Docker Hub (pull and start)"
+	@echo "  docker-deploy-local  - Deploy with local build"
+	@echo "  docker-deploy-ollama - Deploy with Ollama LLM support"
+	@echo "  docker-stop          - Stop Docker deployment"
+	@echo "  docker-status        - Show Docker deployment status"
+	@echo "  docker-logs          - Show Docker logs"
+	@echo "  docker-restart       - Restart Docker deployment"
+	@echo ""
+	@echo "Other:"
 	@echo "  config               - Show current parser configuration"
 	@echo "  test                 - Run tests"
 	@echo "  clean                - Clean up temporary files"
@@ -23,6 +36,10 @@ help:
 	@echo "  make run-company-enrichment ENRICH=true # Enrich all companies"
 	@echo "  make run-query-definition RESUME=path/to/resume.pdf"
 	@echo "  make run-query-definition RESUME=path/to/resume.pdf PROVIDER=ollama"
+	@echo ""
+	@echo "Docker examples:"
+	@echo "  make docker-push VERSION=v1.0.0    # Push with version tag"
+	@echo "  make docker-logs SERVICE=genai-job-finder  # Show specific service logs"
 
 # Install dependencies
 install:
@@ -162,6 +179,76 @@ config:
 	@echo "🔧 PARSER CONFIGURATION"
 	@echo "======================="
 	poetry run python -m genai_job_finder.linkedin_parser.config_manager --all
+
+# Docker deployment targets
+docker-build:
+	@echo "🐳 BUILDING DOCKER IMAGE"
+	@echo "========================"
+	@echo "📦 Building: zarreh/genai-job-finder:latest"
+	@echo ""
+	./deploy.sh build
+
+docker-push:
+	@echo "🐳 BUILD AND PUSH TO DOCKER HUB"
+	@echo "==============================="
+	@echo "📦 Repository: zarreh/genai-job-finder"
+	@echo "🚀 Building and pushing to Docker Hub..."
+	@echo ""
+	@if [ "$(VERSION)" != "" ]; then \
+		echo "🏷️  Version: $(VERSION)"; \
+		./deploy.sh push $(VERSION); \
+	else \
+		echo "🏷️  Version: latest"; \
+		./deploy.sh push; \
+	fi
+
+docker-deploy:
+	@echo "🐳 DEPLOY FROM DOCKER HUB"
+	@echo "========================="
+	@echo "📥 Pulling: zarreh/genai-job-finder:latest"
+	@echo "🚀 Deploying with OpenAI configuration..."
+	@echo ""
+	./deploy.sh start-pull
+
+docker-deploy-local:
+	@echo "🐳 DEPLOY WITH LOCAL BUILD"
+	@echo "=========================="
+	@echo "🔨 Building locally and deploying..."
+	@echo ""
+	./deploy.sh start
+
+docker-deploy-ollama:
+	@echo "🐳 DEPLOY WITH OLLAMA"
+	@echo "===================="
+	@echo "🤖 Deploying with Ollama LLM support..."
+	@echo ""
+	./deploy.sh start-ollama
+
+docker-stop:
+	@echo "🐳 STOPPING DOCKER DEPLOYMENT"
+	@echo "============================="
+	./deploy.sh stop
+
+docker-status:
+	@echo "🐳 DOCKER DEPLOYMENT STATUS"
+	@echo "==========================="
+	./deploy.sh status
+
+docker-logs:
+	@echo "🐳 DOCKER DEPLOYMENT LOGS"
+	@echo "========================="
+	@if [ "$(SERVICE)" != "" ]; then \
+		echo "📋 Showing logs for: $(SERVICE)"; \
+		./deploy.sh logs $(SERVICE); \
+	else \
+		echo "📋 Showing all logs..."; \
+		./deploy.sh logs; \
+	fi
+
+docker-restart:
+	@echo "🐳 RESTARTING DOCKER DEPLOYMENT"
+	@echo "==============================="
+	./deploy.sh restart
 
 # Generate LinkedIn job search queries from resume analysis
 run-query-definition:
