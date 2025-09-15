@@ -39,6 +39,38 @@ A comprehensive job finder application that scrapes LinkedIn job postings with A
 
 ## 🛠️ Installation
 
+### Option 1: Docker Deployment (Recommended for Production)
+
+**Quick Deploy with Docker:**
+```bash
+git clone https://github.com/zarreh/genai_job_finder.git
+cd genai_job_finder
+
+# Test deployment readiness
+./test-deployment.sh
+
+# Deploy with OpenAI (recommended)
+./deploy.sh start
+
+# Or deploy with local Ollama
+./deploy.sh start-ollama
+```
+
+**Access the application at:** `http://localhost:8501`
+
+**Docker deployment features:**
+- 🐳 **Complete containerization** with Python 3.12-slim
+- 🔧 **Flexible LLM configuration** (OpenAI, Ollama, or mixed)
+- 📦 **Automatic dependency management** with Poetry
+- 🔄 **Health checks** and automatic restarts
+- 💾 **Persistent data storage** with volume mounts
+- 🛡️ **Security hardening** with non-root user
+- 📊 **Easy monitoring** with logs and status commands
+
+**See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for complete server deployment guide.**
+
+### Option 2: Local Development Setup
+
 1. **Clone the repository:**
 ```bash
 git clone https://github.com/zarreh/genai_job_finder.git

@@ -71,10 +71,11 @@ frontend.log
 Dockerfile*
 docker-compose*.yml
 
-# Documentation
-README.md
-*.md
+# Documentation (keep README.md for Poetry)
+# README.md
 docs/
+DOCKER_DEPLOYMENT.md
+REFACTORING.md
 
 # Test files
 tests/
