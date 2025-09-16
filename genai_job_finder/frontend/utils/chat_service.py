@@ -124,8 +124,32 @@ Or feel free to ask me any career-related questions. How can I help you today?""
             'engineer', 'analyst', 'director', 'internship', 'freelance'
         ]
         
+        # List of clearly non-career topics
+        non_career_keywords = [
+            'cooking', 'recipe', 'food', 'restaurant', 'weather', 'sports', 'football', 
+            'basketball', 'soccer', 'movie', 'film', 'music', 'song', 'book', 'novel',
+            'travel', 'vacation', 'holiday', 'pet', 'animal', 'cat', 'dog', 'game',
+            'video game', 'mathematics', 'physics', 'chemistry', 'history', 'geography'
+        ]
+        
         message_lower = message.lower()
-        return any(keyword in message_lower for keyword in career_keywords)
+        
+        # If message contains clear non-career keywords, it's not career-related
+        if any(keyword in message_lower for keyword in non_career_keywords):
+            return False
+            
+        # If message contains career keywords, it's career-related
+        if any(keyword in message_lower for keyword in career_keywords):
+            return True
+            
+        # For generic questions like "hello", "hi", "what can you do", etc.
+        # treat them as career-related since this is a career-focused assistant
+        generic_greetings = ['hello', 'hi', 'hey', 'what can you do', 'help', 'what', 'how', 'tell me']
+        if any(greeting in message_lower for greeting in generic_greetings) or len(message.strip()) < 50:
+            return True
+            
+        # Default to career-related for ambiguous cases
+        return True
     
     def process_resume(self, file_path: str) -> str:
         """Process uploaded resume and generate career insights."""
