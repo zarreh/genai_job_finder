@@ -16,9 +16,10 @@ services:
     volumes:
       - ./data:/app/data:rw
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
+      - ./.env:/app/.env:ro  # Add this line to mount .env file
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
