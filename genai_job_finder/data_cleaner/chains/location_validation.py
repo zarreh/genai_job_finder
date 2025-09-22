@@ -50,7 +50,7 @@ class LocationValidationChain:
     
     def __init__(self, config: CleanerConfig = None):
         self.config = config or CleanerConfig()
-        self.llm = get_llm(self.config)
+        self.llm = get_llm()
         self.parser = LocationTypeOutputParser()
         self.prompt = PromptTemplate(
             template=LOCATION_VALIDATION_PROMPT,

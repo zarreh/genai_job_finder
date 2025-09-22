@@ -90,9 +90,9 @@ run-pipeline:
 	@echo "📥 Step 1: Comprehensive LinkedIn parsing with optimized company handling"
 	@$(MAKE) run-parser
 	@echo ""
-	@echo "🏢 Step 2: Company enrichment for any missing company data"
-	@echo "   (Only enriches companies that need additional information)"
-	poetry run python run_company_enrichment.py --enrich-all --verbose
+	@echo "🏢 Step 2: Company enrichment - SKIPPED (integrated in parser)"
+	@echo "   ✅ Company data is already enriched during parsing step"
+	@echo "   📊 Parser automatically fetches company size, followers, and industry"
 	@echo ""
 	@echo "🧹 Step 3: AI-powered data cleaning and enhancement"
 	poetry run python -m genai_job_finder.data_cleaner.run_graph --verbose

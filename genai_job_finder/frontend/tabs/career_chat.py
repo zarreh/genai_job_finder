@@ -30,9 +30,9 @@ def render_career_chat_tab():
     
     st.header("💼 Career Finding Assistant")
     
-    # Configuration info
-    config = st.session_state.chat_config
-    st.markdown(f"**🤖 Chat:** {config.chat_llm.provider.title()} {config.chat_llm.model} | **📄 Resume:** {config.resume_llm.provider.title()} {config.resume_llm.model}")
+    # Import LLM configuration
+    from ...llm_config import frontend_chat_llm, frontend_resume_llm
+    st.markdown(f"**🤖 Chat:** {frontend_chat_llm} | **📄 Resume:** {frontend_resume_llm}")
     
     # Show status info
     col1, col2, col3 = st.columns(3)

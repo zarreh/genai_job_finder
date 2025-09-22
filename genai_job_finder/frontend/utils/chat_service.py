@@ -1,21 +1,19 @@
 import logging
 from typing import List, Dict, Optional, Union
-from langchain_ollama import OllamaLLM
-from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.memory import ConversationBufferMemory
 
 from ...query_definition import ResumeQueryService
-from ...query_definition.config import QueryDefinitionConfig
-from ..config import ChatConfig, LLMConfig, get_chat_config
+from ...llm_factory import get_frontend_chat_llm, get_frontend_resume_llm
+from ..config import ChatConfig, get_chat_config
 
 
 logger = logging.getLogger(__name__)
 
 
 class CareerChatService:
-    """Career-focused chat service using LangChain with configurable LLM providers."""
+    """Career-focused chat service using LangChain with universal LLM configuration."""
     
     def __init__(self, config: Optional[ChatConfig] = None):
         if config is None:
@@ -23,8 +21,8 @@ class CareerChatService:
         
         self.config = config
         
-        # Initialize chat LLM
-        self.llm = self._create_llm(config.chat_llm)
+        # Initialize chat LLM using universal factory
+        self.llm = get_frontend_chat_llm()
         
         self.memory = ConversationBufferMemory(
             memory_key="chat_history",
@@ -32,8 +30,8 @@ class CareerChatService:
             max_token_limit=config.memory_token_limit
         )
         
-        # Initialize resume service with separate LLM config
-        self.resume_service = self._create_resume_service(config.resume_llm)
+        # Initialize resume service using universal factory
+        self.resume_service = ResumeQueryService()
         self.resume_analyzed = False
         
         # Career-focused system prompt
@@ -62,43 +60,6 @@ If someone asks about topics unrelated to careers (like cooking, sports, general
         ])
         
         self.chain = self.prompt_template | self.llm
-    
-    def _create_llm(self, llm_config: LLMConfig) -> Union[ChatOpenAI, OllamaLLM]:
-        """Create LLM instance based on configuration."""
-        if llm_config.provider == "openai":
-            if not llm_config.api_key:
-                raise ValueError("OpenAI API key is required but not provided")
-            
-            return ChatOpenAI(
-                model=llm_config.model,
-                temperature=llm_config.temperature,
-                max_tokens=llm_config.max_tokens,
-                api_key=llm_config.api_key
-            )
-        elif llm_config.provider == "ollama":
-            return OllamaLLM(
-                model=llm_config.model,
-                base_url=llm_config.base_url,
-                temperature=llm_config.temperature,
-                num_predict=llm_config.num_predict
-            )
-        else:
-            raise ValueError(f"Unsupported LLM provider: {llm_config.provider}")
-    
-    def _create_resume_service(self, llm_config: LLMConfig) -> ResumeQueryService:
-        """Create resume service with specified LLM configuration."""
-        # Convert LLMConfig to QueryDefinitionConfig
-        query_config = QueryDefinitionConfig(
-            llm_provider=llm_config.provider,
-            llm_model=llm_config.model,
-            temperature=llm_config.temperature,
-            max_tokens=llm_config.max_tokens or 1000,
-            openai_api_key=llm_config.api_key,
-            ollama_base_url=llm_config.base_url,
-            ollama_num_predict=llm_config.num_predict or 1000
-        )
-        
-        return ResumeQueryService(query_config)
     
     def get_welcome_message(self) -> str:
         """Get the welcome message for new chat sessions."""

@@ -85,7 +85,7 @@ class SalaryExtractionChain:
     
     def __init__(self, config: CleanerConfig = None):
         self.config = config or CleanerConfig()
-        self.llm = get_llm(self.config)
+        self.llm = get_llm()
         self.parser = SalaryOutputParser()
         self.prompt = PromptTemplate(
             template=SALARY_EXTRACTION_PROMPT,
