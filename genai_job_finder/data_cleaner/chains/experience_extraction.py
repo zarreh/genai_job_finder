@@ -52,7 +52,7 @@ class ExperienceExtractionChain:
     
     def __init__(self, config: CleanerConfig = None):
         self.config = config or CleanerConfig()
-        self.llm = get_llm(self.config)
+        self.llm = get_llm()
         self.parser = IntegerOutputParser()
         self.prompt = PromptTemplate(
             template=EXPERIENCE_EXTRACTION_PROMPT,

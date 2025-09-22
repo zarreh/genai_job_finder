@@ -53,7 +53,7 @@ class EmploymentValidationChain:
     
     def __init__(self, config: CleanerConfig = None):
         self.config = config or CleanerConfig()
-        self.llm = get_llm(self.config)
+        self.llm = get_llm()
         self.parser = EmploymentTypeOutputParser()
         self.prompt = PromptTemplate(
             template=EMPLOYMENT_VALIDATION_PROMPT,

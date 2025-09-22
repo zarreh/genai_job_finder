@@ -26,11 +26,11 @@ class ResumeQueryService:
         Initialize the service with configuration.
         
         Args:
-            config: Configuration object. If None, uses default config.
+            config: Configuration object (kept for compatibility but not used for LLM).
         """
         self.config = config or get_default_config()
-        self.chain_manager = ChainManager(self.config)
-        logger.info(f"Initialized ResumeQueryService with {self.config.llm_provider} provider")
+        self.chain_manager = ChainManager()
+        logger.info("Initialized ResumeQueryService with universal LLM configuration")
     
     def process_resume_file(self, file_path: str) -> JobSearchQueries:
         """

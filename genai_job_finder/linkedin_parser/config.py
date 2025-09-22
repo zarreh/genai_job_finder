@@ -60,7 +60,7 @@ LINKEDIN_JOB_SEARCH_PARAMS: List[SearchParams] = [
         time_filter="r86400",            # ⏰ r86400=24h, r604800=7d, r2592000=30d
         remote=True,                     # 🏠 True for remote jobs
         parttime=False,                   # ⏰ True for part-time jobs
-        total_jobs=50                     # 📊 Number of jobs to parse
+        total_jobs=100                     # 📊 Number of jobs to parse
     ),
     
     # EXAMPLE CONFIGURATIONS (uncomment and modify as needed)

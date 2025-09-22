@@ -166,11 +166,8 @@ def run_data_cleaner(db_path: str, progress_callback=None) -> bool:
     try:
         logger.info("Starting data cleaner...")
         
-        # Setup cleaner config
-        config = CleanerConfig(
-            ollama_model="llama3.2",
-            ollama_base_url="http://localhost:11434"
-        )
+        # Setup cleaner config (keeping basic config but LLM will use universal factory)
+        config = CleanerConfig()
         
         # Initialize and run the cleaning graph
         graph = JobCleaningGraph(config)
@@ -342,10 +339,7 @@ def search_jobs(search_query: str, location: str, max_pages: int,
                 
                 try:
                     # Run data cleaner on the temporary database
-                    config = CleanerConfig(
-                        ollama_model="llama3.2",
-                        ollama_base_url="http://localhost:11434"
-                    )
+                    config = CleanerConfig()
                     graph = JobCleaningGraph(config)
                     
                     # Process the jobs through the AI cleaning pipeline
