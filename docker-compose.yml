@@ -34,7 +34,7 @@ services:
       - ./data:/app/data:rw
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
       - ./.env:/app/.env:ro
-    command: ["make", "run-pipeline"]
+    command: ["python", "-m", "genai_job_finder.main", "--mode", "pipeline"]
     restart: "no"
     profiles:
       - pipeline
