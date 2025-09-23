@@ -16,7 +16,7 @@ services:
     volumes:
       - ./data:/app/data:rw
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
-      - ./.env:/app/.env:ro  # Add this line to mount .env file
+      - ./.env:/app/.env:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -24,6 +24,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Pipeline service for scheduled runs
+  pipeline:
+    image: zarreh/genai-job-finder:latest
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data:rw
+      - ./genai_job_finder/data:/app/genai_job_finder/data:rw
+      - ./.env:/app/.env:ro
+    command: ["make", "run-pipeline"]
+    restart: "no"
+    profiles:
+      - pipeline
 
   ollama:
     image: ollama/ollama:latest
@@ -43,27 +57,6 @@ services:
     profiles:
       - ollama
       - full
-
-  # Optional: Setup service to pull Ollama models
-  ollama-setup:
-    image: ollama/ollama:latest
-    depends_on:
-      - ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-    command: >
-      sh -c "
-        echo 'Waiting for Ollama to be ready...' &&
-        sleep 10 &&
-        ollama pull llama3.2:3b &&
-        echo 'Ollama models setup complete!'
-      "
-    profiles:
-      - ollama
-      - full
-    restart: "no"
 
 volumes:
   ollama_data:
