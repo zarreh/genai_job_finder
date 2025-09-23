@@ -34,7 +34,7 @@ services:
       - ./data:/app/data:rw
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
       - ./.env:/app/.env:ro
-    command: ["python", "-m", "genai_job_finder.main", "--mode", "pipeline"]
+    command: ["sh", "-c", "python run_parser.py && python -m genai_job_finder.data_cleaner.run_graph --verbose"]
     restart: "no"
     profiles:
       - pipeline
