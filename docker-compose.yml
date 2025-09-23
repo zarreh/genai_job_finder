@@ -18,6 +18,7 @@ services:
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
       - ./.env:/app/.env:ro
     restart: unless-stopped
+    user: "1000:1000"  # Add this line
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -36,6 +37,7 @@ services:
       - ./.env:/app/.env:ro
     command: ["sh", "-c", "python run_parser.py && python -m genai_job_finder.data_cleaner.run_graph --verbose"]
     restart: "no"
+    user: "1000:1000"  # Add this line
     profiles:
       - pipeline
 
