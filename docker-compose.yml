@@ -11,14 +11,15 @@ services:
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - DATABASE_URL=${DATABASE_URL}  # Add this
     env_file:
       - .env
     volumes:
-      - ./data:/app/data:rw
+      - ./data:/app/data:rw  # Keep for CSV exports and logs
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
       - ./.env:/app/.env:ro
     restart: unless-stopped
-    user: "1000:1000"  # Add this line
+    user: "1000:1000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -29,15 +30,17 @@ services:
   # Pipeline service for scheduled runs
   pipeline:
     image: zarreh/genai-job-finder:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL}  # Add this
     env_file:
       - .env
     volumes:
-      - ./data:/app/data:rw
+      - ./data:/app/data:rw  # Keep for logs and exports
       - ./genai_job_finder/data:/app/genai_job_finder/data:rw
       - ./.env:/app/.env:ro
     command: ["sh", "-c", "python run_parser.py && python -m genai_job_finder.data_cleaner.run_graph --verbose"]
     restart: "no"
-    user: "1000:1000"  # Add this line
+    user: "1000:1000"
     profiles:
       - pipeline
 
